@@ -1,4 +1,4 @@
-import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, summarize, computeBatchProgress, getDefaultTemplate } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban } from "./db.js";
 
 export async function body(req) {
   const chunks = [];
@@ -34,11 +34,32 @@ export async function patchItem(req, res, id) {
   const db = await loadDb();
   const item = db.items.find(x => x.id === id || x.code === id);
   if (!item) return send(res, 404, { error: "item_not_found" });
-  Object.assign(item, await body(req));
+  const input = await body(req);
+  const oldStatus = item.status;
+  const oldStorage = item.storage;
+  Object.assign(item, input);
   item.logs ||= [];
-  item.logs.push({ at: new Date().toISOString(), step: "状态", note: "更新为" + item.status });
+  if (input.status !== undefined && input.status !== oldStatus) {
+    item.logs.push({ at: new Date().toISOString(), step: "状态", note: "更新为" + item.status });
+  }
+  if (input.storage !== undefined && input.storage !== oldStorage) {
+    item.logs.push({ at: new Date().toISOString(), step: "存放位置", note: "从 " + (oldStorage || "未指定") + " 移至 " + (item.storage || "未指定") });
+  }
   await saveDb(db);
   return send(res, 200, item);
+}
+
+export async function getStorageKanban(req, res) {
+  const db = await loadDb();
+  const kanban = computeStorageKanban(db.items);
+  return send(res, 200, kanban);
+}
+
+export async function getItemsByStorage(req, res, storage) {
+  const db = await loadDb();
+  const decoded = decodeURIComponent(storage);
+  const filtered = db.items.filter(item => (item.storage || "未指定位置") === decoded).map(summarize);
+  return send(res, 200, { storage: decoded, items: filtered });
 }
 
 export async function addLog(req, res, id) {

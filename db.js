@@ -162,3 +162,28 @@ export function newTemplateId() {
 export function getDefaultTemplate(templates) {
   return templates.find(t => t.isDefault) || templates[0] || null;
 }
+
+export function computeStorageKanban(items) {
+  const groups = {};
+  for (const item of items) {
+    const storage = item.storage || "未指定位置";
+    if (!groups[storage]) {
+      groups[storage] = {
+        storage,
+        total: 0,
+        counts: Object.fromEntries(statLabels.map(l => [l, 0])),
+        items: []
+      };
+    }
+    groups[storage].total += 1;
+    if (groups[storage].counts[item.status] !== undefined) {
+      groups[storage].counts[item.status] += 1;
+    }
+    groups[storage].items.push(summarize(item));
+  }
+  return Object.values(groups).sort((a, b) => {
+    if (a.storage === "未指定位置") return 1;
+    if (b.storage === "未指定位置") return -1;
+    return a.storage.localeCompare(b.storage, "zh-CN");
+  });
+}

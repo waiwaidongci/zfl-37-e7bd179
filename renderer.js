@@ -20,6 +20,7 @@ export function page() {
       <div class="tabs">
         <div class="tab active" data-tab="items">墨锭管理</div>
         <div class="tab" data-tab="batches">批次管理</div>
+        <div class="tab" data-tab="storage">存放位置看板</div>
         <div class="tab" data-tab="templates">试磨方案模板</div>
       </div>
       <div id="tab-items">
@@ -52,6 +53,12 @@ export function page() {
           <div id="batchFields"></div>
           <button>保存批次</button>
         </form>
+      </div>
+      <div id="tab-storage" style="display:none">
+        <div class="panel">
+          <h2>看板说明</h2>
+          <div class="meta">按存放位置（恒湿柜、试样盒等）分组展示墨锭。<br>点击分组卡片查看该位置的全部墨锭，可在详情中修改存放位置。</div>
+        </div>
       </div>
       <div id="tab-templates" style="display:none">
         <form id="templateForm">
@@ -91,6 +98,32 @@ export function page() {
             <tbody></tbody>
           </table>
           <div id="batchEmpty" class="empty" style="display:none">暂无批次数据，请在左侧新增批次。</div>
+        </div>
+      </div>
+      <div id="view-storage" style="display:none">
+        <div class="stats" id="storageStats"></div>
+        <div id="storageKanbanView">
+          <div class="panel">
+            <div class="section-title">
+              <h2>存放位置分组 — 点击卡片查看该位置的墨锭列表</h2>
+            </div>
+            <div class="kanban-grid" id="kanbanCards"></div>
+            <div id="kanbanEmpty" class="empty" style="display:none">暂无墨锭数据，请在「墨锭管理」中新增墨锭并设置存放位置。</div>
+          </div>
+        </div>
+        <div id="storageDetailView" style="display:none">
+          <div class="panel">
+            <div class="section-title">
+              <h2 id="storageDetailTitle">存放位置详情</h2>
+              <button class="secondary" id="backToKanban">← 返回看板</button>
+            </div>
+            <div class="toolbar">
+              <select id="storageStatusFilter"><option value="">全部状态</option></select>
+              <input id="storageSearch" placeholder="搜索编号或关键词">
+            </div>
+            <div class="grid" id="storageCards"></div>
+            <div id="storageDetailEmpty" class="empty" style="display:none">该位置暂无墨锭。</div>
+          </div>
         </div>
       </div>
       <div id="view-templates" style="display:none">

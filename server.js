@@ -6,7 +6,8 @@ import { page } from "./renderer.js";
 import {
   getItems, createItem, patchItem, addLog, addAction,
   getBatches, createBatch, getBatch, getStats, send,
-  getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate
+  getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate,
+  getStorageKanban, getItemsByStorage
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -75,6 +76,11 @@ const server = http.createServer(async (req, res) => {
 
     const setDefault = url.pathname.match(/^\/api\/templates\/([^/]+)\/default$/);
     if (setDefault && req.method === "POST") return setDefaultTemplate(req, res, setDefault[1]);
+
+    if (req.method === "GET" && url.pathname === "/api/storage") return getStorageKanban(req, res);
+
+    const storageDetail = url.pathname.match(/^\/api\/storage\/(.+)$/);
+    if (storageDetail && req.method === "GET") return getItemsByStorage(req, res, storageDetail[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {
