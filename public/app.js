@@ -100,15 +100,56 @@ const FIELD_LABELS = {
 let pendingConflict = null;
 let pendingConflictCallback = null;
 let pendingConflictOriginalPayload = null;
+let pendingConflictApiContext = null;
+let pendingDeleteConflict = null;
 
-function showConflictModal(conflict, originalPayload, callback) {
+function showDeleteConflictModal(conflict, callback, apiContext) {
+  pendingDeleteConflict = { conflict, callback, apiContext };
+  const modal = document.querySelector('#conflictModal');
+  const summary = document.querySelector('#conflictSummary');
+  const fieldsEl = document.querySelector('#conflictFields');
+
+  summary.innerHTML = `
+    <h3>⚠️ 删除冲突</h3>
+    <div class="meta">您要删除的记录已被其他用户修改。是否仍要删除？</div>
+    <div class="version-info">
+      <span>您的版本：v${conflict.baseVersion}</span>
+      <span>最新版本：v${conflict.currentVersion}</span>
+    </div>
+  `;
+
+  let html = '<div style="padding:16px;background:#fff8e1;border-radius:8px;">';
+  html += '<div style="font-weight:600;margin-bottom:8px;">最新数据预览：</div>';
+  html += '<div style="font-size:12px;color:#666;word-break:break-all;">';
+  html += escapeHtml(JSON.stringify(conflict.serverRecord, null, 2));
+  html += '</div></div>';
+  fieldsEl.innerHTML = html;
+
+  fieldsEl.querySelectorAll('[data-choice-server]').forEach(btn => btn.style.display = 'none');
+  fieldsEl.querySelectorAll('[data-choice-client]').forEach(btn => btn.style.display = 'none');
+  document.querySelector('#conflictKeepAllServer').style.display = 'none';
+  document.querySelector('#conflictKeepAllClient').style.display = 'none';
+  const submitBtn = document.querySelector('#conflictSubmit');
+  submitBtn.textContent = '✓ 确认删除';
+  submitBtn.dataset.mode = 'delete';
+  modal.style.display = 'flex';
+}
+
+function showConflictModal(conflict, originalPayload, callback, apiContext) {
   pendingConflict = conflict;
   pendingConflictCallback = callback;
   pendingConflictOriginalPayload = originalPayload;
+  pendingConflictApiContext = apiContext;
 
   const modal = document.querySelector('#conflictModal');
   const summary = document.querySelector('#conflictSummary');
   const fieldsEl = document.querySelector('#conflictFields');
+
+  document.querySelector('#conflictKeepAllServer').style.display = '';
+  document.querySelector('#conflictKeepAllClient').style.display = '';
+  const submitBtn = document.querySelector('#conflictSubmit');
+  submitBtn.textContent = '✓ 确认并提交';
+  submitBtn.dataset.mode = 'update';
 
   const fieldLabels = Object.keys(conflict.conflictingFields).map(f => FIELD_LABELS[f] || f).join('、');
   summary.innerHTML = `
@@ -204,17 +245,39 @@ function closeConflictModal() {
   pendingConflict = null;
   pendingConflictCallback = null;
   pendingConflictOriginalPayload = null;
+  pendingConflictApiContext = null;
+  pendingDeleteConflict = null;
 }
 
-async function resolveConflictAndRetry(path, options, extra) {
-  if (!pendingConflict || !pendingConflictCallback) return;
+async function resolveConflictAndRetry() {
+  if (pendingDeleteConflict) {
+    const { conflict, callback, apiContext } = pendingDeleteConflict;
+    const { path, options, baseVersion, onSuccess } = apiContext;
+    try {
+      const result = await api(path, options, {
+        _baseVersion: baseVersion,
+        _conflictResolution: { _delete: "force" }
+      });
+      closeConflictModal();
+      if (onSuccess) onSuccess(result);
+      if (callback) callback(result);
+    } catch(err) {
+      closeConflictModal();
+      alert('删除失败：' + (err.message || '未知错误'));
+    }
+    return;
+  }
+
+  if (!pendingConflict || !pendingConflictApiContext) return;
   const resolution = collectFieldResolutions();
+  const { path, options, baseVersion, onSuccess } = pendingConflictApiContext;
   try {
     const result = await api(path, options, {
-      _baseVersion: extra._baseVersion,
+      _baseVersion: baseVersion,
       _conflictResolution: resolution
     });
     closeConflictModal();
+    if (onSuccess) onSuccess(result);
     if (pendingConflictCallback) pendingConflictCallback(result);
   } catch(err) {
     if (err.conflict) {
@@ -229,6 +292,7 @@ async function resolveConflictAndRetry(path, options, extra) {
 function bindConflictModalEvents() {
   document.querySelector('#closeConflictModal').onclick = closeConflictModal;
   document.querySelector('#conflictCancel').onclick = closeConflictModal;
+  document.querySelector('#conflictSubmit').onclick = resolveConflictAndRetry;
   document.querySelector('#conflictKeepAllServer').onclick = () => {
     if (!pendingConflict) return;
     for (const field of Object.keys(pendingConflict.conflictingFields)) {
@@ -256,29 +320,14 @@ async function apiWithConflict(path, options, getVersionFn, onSuccess) {
   } catch(err) {
     if (err.conflict) {
       return new Promise((resolve) => {
-        showConflictModal(err.conflict, options?.body ? JSON.parse(options.body) : {}, async (finalResult) => {
-          if (onSuccess) onSuccess(finalResult);
-          resolve(finalResult);
-        });
-        const origResolve = resolve;
-        const retryBtn = document.createElement('button');
-        retryBtn.style.display = 'none';
-        document.querySelector('#conflictKeepAllServer').insertAdjacentElement('afterend',
-          Object.assign(retryBtn = document.createElement('button'), {
-            textContent: '确认并提交',
-            className: 'gold',
-            onclick: async () => {
-              try {
-                const resolution = collectFieldResolutions();
-                const result = await api(path, options, { _baseVersion: err.conflict.baseVersion, _conflictResolution: resolution });
-                closeConflictModal();
-                if (onSuccess) onSuccess(result);
-                origResolve(result);
-              } catch(e) {
-                alert('提交失败：' + (e.message || '未知错误'));
-              }
-            }
-          })
+        const apiContext = { path, options, baseVersion: err.conflict.baseVersion, onSuccess };
+        showConflictModal(
+          err.conflict,
+          options?.body ? JSON.parse(options.body) : {},
+          (finalResult) => {
+            resolve(finalResult);
+          },
+          apiContext
         );
       });
     }
@@ -395,7 +444,7 @@ function bindCardEvents() {
       if (err.conflict) {
         showConflictModal(err.conflict, { status: sel.value, createdBy, reason }, () => {
           load();
-        });
+        }, { path: '/api/items/'+id, options: { method:'PATCH', body: JSON.stringify({ status: sel.value, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
         return;
       }
       alert(err.message || '操作失败');
@@ -417,7 +466,7 @@ function bindCardEvents() {
         if (err.conflict) {
           showConflictModal(err.conflict, { step:'备注', note, createdBy, reason }, () => {
             load();
-          });
+          }, { path: '/api/items/'+id+'/logs', options: { method:'POST', body: JSON.stringify({ step:'备注', note, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
           return;
         }
         alert(err.message || '操作失败');
@@ -450,7 +499,7 @@ function bindCardEvents() {
       if (err.conflict) {
         showConflictModal(err.conflict, { storage: trimmed, createdBy, reason }, () => {
           load();
-        });
+        }, { path: '/api/items/'+id, options: { method:'PATCH', body: JSON.stringify({ storage: trimmed, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
         return;
       }
       alert(err.message || '操作失败');
@@ -632,7 +681,7 @@ function render() {
         if (err.conflict) {
           showConflictModal(err.conflict, {}, () => {
             load();
-          });
+          }, { path: '/api/templates/'+id+'/default', options: { method:'POST' }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
           return;
         }
         alert(err.message || '操作失败');
@@ -643,14 +692,18 @@ function render() {
       const id = btn.dataset.delete;
       const tpl = templates.find(t => t.id === id);
       const baseVersion = tpl ? tpl._version : 0;
+      const path = '/api/templates/'+id;
+      const options = { method:'DELETE', body: JSON.stringify({}) };
       try {
-        await api('/api/templates/'+id, { method:'DELETE' }, { _baseVersion: baseVersion });
+        await api(path, options, { _baseVersion: baseVersion });
         await load();
       } catch(err) {
         if (err.conflict) {
-          showConflictModal(err.conflict, {}, () => {
-            load();
-          });
+          if (err.conflict.type === 'delete_conflict') {
+            showDeleteConflictModal(err.conflict, () => load(), { path, options, baseVersion, onSuccess: () => load() });
+          } else {
+            showConflictModal(err.conflict, {}, () => load(), { path, options, baseVersion, onSuccess: () => load() });
+          }
           return;
         }
         alert(err.message || '操作失败');
@@ -723,7 +776,7 @@ function render() {
           if (err.conflict) {
             showConflictModal(err.conflict, payload, () => {
               load();
-            });
+            }, { path: '/api/scoring-rules/reorder', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
             return;
           }
           alert(err.message || '操作失败');
@@ -747,7 +800,7 @@ function render() {
           if (err.conflict) {
             showConflictModal(err.conflict, payload, () => {
               load();
-            });
+            }, { path: '/api/scoring-rules/reorder', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
             return;
           }
           alert(err.message || '操作失败');
@@ -759,14 +812,18 @@ function render() {
         const id = btn.dataset.srDelete;
         const rule = scoringRules.find(r => r.id === id);
         const baseVersion = rule ? rule._version : 0;
+        const path = '/api/scoring-rules/'+id;
+        const options = { method:'DELETE', body: JSON.stringify({}) };
         try {
-          await api('/api/scoring-rules/'+id, { method:'DELETE' }, { _baseVersion: baseVersion });
+          await api(path, options, { _baseVersion: baseVersion });
           await load();
         } catch(err) {
           if (err.conflict) {
-            showConflictModal(err.conflict, {}, () => {
-              load();
-            });
+            if (err.conflict.type === 'delete_conflict') {
+              showDeleteConflictModal(err.conflict, () => load(), { path, options, baseVersion, onSuccess: () => load() });
+            } else {
+              showConflictModal(err.conflict, {}, () => load(), { path, options, baseVersion, onSuccess: () => load() });
+            }
             return;
           }
           alert(err.message || '操作失败');
@@ -954,7 +1011,7 @@ function bindTaskEvents() {
       if (err.conflict) {
         showConflictModal(err.conflict, payload, () => {
           load();
-        });
+        }, { path: '/api/tasks/'+id+'/complete', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
         return;
       }
       alert(err.message || '操作失败');
@@ -976,7 +1033,7 @@ function bindTaskEvents() {
       if (err.conflict) {
         showConflictModal(err.conflict, payload, () => {
           load();
-        });
+        }, { path: '/api/tasks/'+id, options: { method:'PATCH', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
         return;
       }
       alert(err.message || '操作失败');
@@ -995,7 +1052,7 @@ function bindTaskEvents() {
       if (err.conflict) {
         showConflictModal(err.conflict, payload, () => {
           load();
-        });
+        }, { path: '/api/tasks/'+id, options: { method:'PATCH', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
         return;
       }
       alert(err.message || '操作失败');
@@ -1007,14 +1064,18 @@ function bindTaskEvents() {
     if (!confirm('确定删除此任务？')) return;
     const task = tasks.find(t => t.id === id);
     const baseVersion = task ? task._version : 0;
+    const path = '/api/tasks/'+id;
+    const options = { method:'DELETE', body: JSON.stringify({}) };
     try {
-      await api('/api/tasks/'+id, { method:'DELETE' }, { _baseVersion: baseVersion });
+      await api(path, options, { _baseVersion: baseVersion });
       await load();
     } catch(err) {
       if (err.conflict) {
-        showConflictModal(err.conflict, {}, () => {
-          load();
-        });
+        if (err.conflict.type === 'delete_conflict') {
+          showDeleteConflictModal(err.conflict, () => load(), { path, options, baseVersion, onSuccess: () => load() });
+        } else {
+          showConflictModal(err.conflict, {}, () => load(), { path, options, baseVersion, onSuccess: () => load() });
+        }
         return;
       }
       alert(err.message || '操作失败');
@@ -1108,7 +1169,7 @@ createForm.onsubmit = async event => {
       showConflictModal(err.conflict, payload, () => {
         createForm.reset();
         load();
-      });
+      }, { path: '/api/items', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { createForm.reset(); load(); } });
       return;
     }
     alert(err.message || '操作失败');
@@ -1129,7 +1190,7 @@ actionForm.onsubmit = async event => {
       showConflictModal(err.conflict, payload, () => {
         actionForm.reset();
         load();
-      });
+      }, { path: '/api/items/'+id+'/action', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { actionForm.reset(); load(); } });
       return;
     }
     alert(err.message || '操作失败');
@@ -1147,7 +1208,7 @@ batchForm.onsubmit = async event => {
       showConflictModal(err.conflict, payload, () => {
         batchForm.reset();
         load();
-      });
+      }, { path: '/api/batches', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { batchForm.reset(); load(); } });
       return;
     }
     alert(err.message || '操作失败');
@@ -1166,7 +1227,7 @@ templateForm.onsubmit = async event => {
       showConflictModal(err.conflict, data, () => {
         templateForm.reset();
         load();
-      });
+      }, { path: '/api/templates', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { templateForm.reset(); load(); } });
       return;
     }
     alert(err.message || '操作失败');
@@ -1235,7 +1296,21 @@ if (scoringRuleForm) {
               if (srSelect) srSelect.disabled = false;
               document.querySelector('#srOrder').value = '0';
               load();
-            });
+            }, { path: '/api/scoring-rules/' + editingScoringRuleId, options: { method:'PATCH', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
+              editingScoringRuleId = null;
+              scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
+              scoringRuleForm.querySelector('button').textContent = '保存规则';
+              scoringRuleForm.reset();
+              if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
+              if (srResultStatusCustom) {
+                srResultStatusCustom.style.display = 'none';
+                srResultStatusCustom.value = '';
+              }
+              const srSelect = document.querySelector('#srResultStatus');
+              if (srSelect) srSelect.disabled = false;
+              document.querySelector('#srOrder').value = '0';
+              load();
+            } });
             return;
           }
           throw err;
@@ -1269,7 +1344,18 @@ if (scoringRuleForm) {
           if (srSelect) srSelect.disabled = false;
           document.querySelector('#srOrder').value = '0';
           load();
-        });
+        }, { path: '/api/scoring-rules', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
+          scoringRuleForm.reset();
+          if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
+          if (srResultStatusCustom) {
+            srResultStatusCustom.style.display = 'none';
+            srResultStatusCustom.value = '';
+          }
+          const srSelect = document.querySelector('#srResultStatus');
+          if (srSelect) srSelect.disabled = false;
+          document.querySelector('#srOrder').value = '0';
+          load();
+        } });
         return;
       }
       const msg = err && err.message ? err.message : '操作失败';
@@ -1348,7 +1434,12 @@ taskForm.onsubmit = async event => {
         const today = new Date().toISOString().slice(0,10);
         document.querySelector('#taskDate').value = today;
         load();
-      });
+      }, { path: '/api/tasks', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
+        taskForm.reset();
+        const today = new Date().toISOString().slice(0,10);
+        document.querySelector('#taskDate').value = today;
+        load();
+      } });
       return;
     }
     alert('创建失败：' + err.message);
@@ -1702,7 +1793,11 @@ async function doRestoreVersion(itemId, versionNum) {
         document.querySelector('#versionHistoryModal').style.display = 'none';
         document.querySelector('#versionDetailModal').style.display = 'none';
         load();
-      });
+      }, { path: '/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum + '/restore', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: e.conflict.baseVersion, onSuccess: () => {
+        document.querySelector('#versionHistoryModal').style.display = 'none';
+        document.querySelector('#versionDetailModal').style.display = 'none';
+        load();
+      } });
       return;
     }
     alert('恢复失败：' + e.message);
@@ -1849,7 +1944,13 @@ function bindVersionModalEvents() {
             document.querySelector('#submitRevisionBtn').disabled = false;
             document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
             load();
-          });
+          }, { path: '/api/items/' + encodeURIComponent(currentHistoryItemId) + '/versions', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: e.conflict.baseVersion, onSuccess: (finalResult) => {
+            alert('✓ 修订成功！已创建新版本 v' + finalResult.version.version);
+            document.querySelector('#revisionModal').style.display = 'none';
+            document.querySelector('#submitRevisionBtn').disabled = false;
+            document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
+            load();
+          } });
           document.querySelector('#submitRevisionBtn').disabled = false;
           document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
           return;

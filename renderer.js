@@ -360,7 +360,8 @@ export function page() {
         <div id="conflictFields" class="conflict-fields"></div>
         <div id="conflictActions" style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
           <button id="conflictKeepAllServer" class="secondary">全部采用最新数据</button>
-          <button id="conflictKeepAllClient" class="gold">全部保留我的修改</button>
+          <button id="conflictKeepAllClient" class="secondary">全部保留我的修改</button>
+          <button id="conflictSubmit" class="gold">✓ 确认并提交</button>
           <button id="conflictCancel" class="secondary" style="background:var(--warn)">取消修改</button>
         </div>
       </div>

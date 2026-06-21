@@ -114,3 +114,19 @@ export function appendChangeLog(record, oldSnapshot) {
   }
   return record;
 }
+
+export function detectDeleteConflict(collection, currentRecord, clientBaseVersion) {
+  if (!currentRecord) return null;
+  const currentVersion = currentRecord._version || 1;
+  const baseVersion = Number(clientBaseVersion) || 0;
+  if (baseVersion === 0 || baseVersion >= currentVersion) return null;
+  return {
+    type: "delete_conflict",
+    collection,
+    recordId: currentRecord.id,
+    baseVersion,
+    currentVersion,
+    message: "该记录已被其他用户修改，是否仍要删除？",
+    serverRecord: deepClone(stripMeta(currentRecord))
+  };
+}

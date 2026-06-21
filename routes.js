@@ -1,7 +1,7 @@
 import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions, prepareNewRecord, updateRecordWithVersion, findInCollection, saveAndNotify, CHANGE_TYPES } from "./db.js";
 import { analyzeCSV, buildImportItems } from "./csvImporter.js";
 import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId, collectStatuses } from "./scoringRules.js";
-import { detectConflict, resolveConflict } from "./conflictDetection.js";
+import { detectConflict, resolveConflict, detectDeleteConflict } from "./conflictDetection.js";
 import { onDataChange } from "./syncEvents.js";
 import { COLLLECTIONS } from "./dataLayer.js";
 
@@ -55,6 +55,18 @@ export function handleUpdatesWithConflict(collection, currentRecord, input, appl
 
   applyFn(updates);
   return { resolved: true, conflict: null, record: currentRecord };
+}
+
+export function handleDeleteWithConflict(collection, currentRecord, input) {
+  const baseVersion = Number(input._baseVersion) || 0;
+  const conflict = detectDeleteConflict(collection, currentRecord, baseVersion);
+  if (conflict) {
+    if (input._conflictResolution && input._conflictResolution._delete === "force") {
+      return { resolved: true, conflict: null };
+    }
+    return { resolved: false, conflict };
+  }
+  return { resolved: true, conflict: null };
 }
 
 const sseClients = new Set();
@@ -368,6 +380,14 @@ export async function deleteTemplate(req, res, id) {
   db.templates ||= [];
   const idx = db.templates.findIndex(t => t.id === id);
   if (idx === -1) return sendError(res, 404, "template_not_found", "模板不存在");
+  const template = db.templates[idx];
+
+  const input = await body(req);
+  const deleteCheck = handleDeleteWithConflict(COLLLECTIONS.TEMPLATES, template, input);
+  if (!deleteCheck.resolved) {
+    return sendConflict(res, deleteCheck.conflict);
+  }
+
   const deleted = db.templates.splice(idx, 1)[0];
   if (deleted.isDefault && db.templates.length > 0) {
     db.templates[0].isDefault = true;
@@ -602,6 +622,14 @@ export async function deleteTask(req, res, id) {
   db.tasks ||= [];
   const idx = db.tasks.findIndex(t => t.id === id);
   if (idx === -1) return sendError(res, 404, "task_not_found", "任务不存在");
+  const task = db.tasks[idx];
+
+  const input = await body(req);
+  const deleteCheck = handleDeleteWithConflict(COLLLECTIONS.TASKS, task, input);
+  if (!deleteCheck.resolved) {
+    return sendConflict(res, deleteCheck.conflict);
+  }
+
   const deleted = db.tasks.splice(idx, 1)[0];
   await saveAndNotify(db, COLLLECTIONS.TASKS, CHANGE_TYPES.DELETED, deleted);
   return sendOk(res, { success: true });
@@ -646,6 +674,12 @@ export async function deleteItem(req, res, id) {
   const db = await loadDb();
   const item = db.items.find(x => x.id === id || x.code === id);
   if (!item) return sendError(res, 404, "item_not_found", "墨锭不存在");
+
+  const input = await body(req);
+  const deleteCheck = handleDeleteWithConflict(COLLLECTIONS.ITEMS, item, input);
+  if (!deleteCheck.resolved) {
+    return sendConflict(res, deleteCheck.conflict);
+  }
 
   db.items = db.items.filter(x => x.id !== item.id);
 
@@ -1158,6 +1192,14 @@ export async function deleteScoringRule(req, res, id) {
   db.scoringRules ||= [];
   const idx = db.scoringRules.findIndex(r => r.id === id);
   if (idx === -1) return sendError(res, 404, "rule_not_found", "评分规则不存在");
+  const rule = db.scoringRules[idx];
+
+  const input = await body(req);
+  const deleteCheck = handleDeleteWithConflict(COLLLECTIONS.SCORING_RULES, rule, input);
+  if (!deleteCheck.resolved) {
+    return sendConflict(res, deleteCheck.conflict);
+  }
+
   const deleted = db.scoringRules.splice(idx, 1)[0];
   await saveAndNotify(db, COLLLECTIONS.SCORING_RULES, CHANGE_TYPES.DELETED, deleted);
   return sendOk(res, { success: true });
