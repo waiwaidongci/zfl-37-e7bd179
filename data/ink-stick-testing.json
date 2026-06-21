@@ -17,98 +17,6 @@
   ],
   "items": [
     {
-      "id": "IS-1782032714066-RVMC",
-      "code": "IS-402",
-      "smokeSource": "桐油烟",
-      "glueRatio": "8%",
-      "ageYears": 3,
-      "storage": "试样盒C",
-      "batchId": "BAT-20260611-02",
-      "status": "待试磨",
-      "logs": [
-        {
-          "at": "2026-06-21T09:05:14.066Z",
-          "step": "建档",
-          "note": "CSV批量导入创建墨锭，归入批次"
-        }
-      ],
-      "tests": [],
-      "versions": [
-        {
-          "version": 1,
-          "createdAt": "2026-06-21T09:05:14.066Z",
-          "createdBy": "测试用户",
-          "reason": "CSV批量导入建档",
-          "action": "create",
-          "parentVersion": null,
-          "snapshot": {
-            "status": "待试磨",
-            "storage": "试样盒C",
-            "smokeSource": "桐油烟",
-            "glueRatio": "8%",
-            "ageYears": 3,
-            "batchId": "BAT-20260611-02",
-            "logs": [
-              {
-                "at": "2026-06-21T09:05:14.066Z",
-                "step": "建档",
-                "note": "CSV批量导入创建墨锭，归入批次"
-              }
-            ],
-            "tests": []
-          },
-          "changes": null
-        }
-      ],
-      "currentVersion": 1
-    },
-    {
-      "id": "IS-1782032714066-XG2E",
-      "code": "IS-401",
-      "smokeSource": "黄山松烟",
-      "glueRatio": "7.5%",
-      "ageYears": 5,
-      "storage": "恒湿柜A",
-      "batchId": "BAT-20260611-01",
-      "status": "待试磨",
-      "logs": [
-        {
-          "at": "2026-06-21T09:05:14.066Z",
-          "step": "建档",
-          "note": "CSV批量导入创建墨锭，归入批次"
-        }
-      ],
-      "tests": [],
-      "versions": [
-        {
-          "version": 1,
-          "createdAt": "2026-06-21T09:05:14.066Z",
-          "createdBy": "测试用户",
-          "reason": "CSV批量导入建档",
-          "action": "create",
-          "parentVersion": null,
-          "snapshot": {
-            "status": "待试磨",
-            "storage": "恒湿柜A",
-            "smokeSource": "黄山松烟",
-            "glueRatio": "7.5%",
-            "ageYears": 5,
-            "batchId": "BAT-20260611-01",
-            "logs": [
-              {
-                "at": "2026-06-21T09:05:14.066Z",
-                "step": "建档",
-                "note": "CSV批量导入创建墨锭，归入批次"
-              }
-            ],
-            "tests": []
-          },
-          "changes": null
-        }
-      ],
-      "currentVersion": 1
-    },
-    {
       "id": "IS-001",
       "code": "IS-001",
       "batchId": "BAT-20260611-01",
@@ -268,21 +176,5 @@
     }
   ],
   "tasks": [],
-  "importBatches": [
-    {
-      "id": "IMP-20260621-FSG6",
-      "code": "IMP0001",
-      "importedAt": "2026-06-21T09:05:14.066Z",
-      "importedBy": "测试用户",
-      "itemCount": 2,
-      "totalRows": 2,
-      "errorCount": 0,
-      "note": "API测试导入",
-      "itemCodes": [
-        "IS-401",
-        "IS-402"
-      ],
-      "errors": []
-    }
-  ]
+  "importBatches": []
 }
