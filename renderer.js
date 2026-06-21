@@ -349,6 +349,28 @@ export function page() {
       </div>
     </div>
   </div>
+  <div id="conflictModal" class="modal-overlay" style="display:none">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h2 id="conflictTitle">⚠️ 数据冲突</h2>
+        <button class="modal-close" id="closeConflictModal">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="conflictSummary" class="conflict-summary"></div>
+        <div id="conflictFields" class="conflict-fields"></div>
+        <div id="conflictActions" style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap">
+          <button id="conflictKeepAllServer" class="secondary">全部采用最新数据</button>
+          <button id="conflictKeepAllClient" class="gold">全部保留我的修改</button>
+          <button id="conflictCancel" class="secondary" style="background:var(--warn)">取消修改</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="syncStatusBar" class="sync-status-bar" style="display:none">
+    <span id="syncStatusIcon">🔄</span>
+    <span id="syncStatusText">正在同步...</span>
+  </div>
+  <script src="/public/dataSync.js"></script>
   <script src="/public/app.js"></script>
 </body>
 </html>`;

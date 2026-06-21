@@ -64,11 +64,227 @@ let scoringRules = [];
 let scoringCoverage = null;
 let scoringStatuses = [];
 
-async function api(path, options) {
-  const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
+async function api(path, options, extra = {}) {
+  const opts = options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : (options || {});
+  if (extra._baseVersion !== undefined && opts.body) {
+    try {
+      const body = JSON.parse(opts.body);
+      body._baseVersion = extra._baseVersion;
+      if (extra._conflictResolution) body._conflictResolution = extra._conflictResolution;
+      opts.body = JSON.stringify(body);
+    } catch(e) {}
+  }
+  const res = await fetch(path, opts);
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || '请求失败');
-  return data;
+  if (data && data.ok === false) {
+    const err = new Error(data.message || data.error || '请求失败');
+    err.error = data.error;
+    err.conflict = data.conflict;
+    err.details = data;
+    throw err;
+  }
+  return data && data.data !== undefined ? data.data : data;
+}
+
+const FIELD_LABELS = {
+  status: '状态', storage: '存放位置', smokeSource: '烟料来源',
+  glueRatio: '胶料比例', ageYears: '存放年限', batchId: '所属批次',
+  code: '编号', name: '名称', paper: '试磨纸张', water: '加水量',
+  grindingTime: '研磨时长', speed: '出墨速度', observationPoints: '观察重点',
+  isDefault: '是否默认模板', scheduledDate: '计划日期', assignee: '负责人',
+  note: '备注', minScore: '最低分', maxScore: '最高分',
+  resultStatus: '结果状态', hintText: '提示文案', order: '优先级',
+  receiveDate: '入库日期', logs: '操作日志', tests: '试磨记录'
+};
+
+let pendingConflict = null;
+let pendingConflictCallback = null;
+let pendingConflictOriginalPayload = null;
+
+function showConflictModal(conflict, originalPayload, callback) {
+  pendingConflict = conflict;
+  pendingConflictCallback = callback;
+  pendingConflictOriginalPayload = originalPayload;
+
+  const modal = document.querySelector('#conflictModal');
+  const summary = document.querySelector('#conflictSummary');
+  const fieldsEl = document.querySelector('#conflictFields');
+
+  const fieldLabels = Object.keys(conflict.conflictingFields).map(f => FIELD_LABELS[f] || f).join('、');
+  summary.innerHTML = `
+    <h3>⚠️ 检测到数据冲突</h3>
+    <div class="meta">您正在修改的数据已被其他人更新。请选择每个字段要保留哪个版本：</div>
+    <div class="version-info">
+      <span>您的版本：v${conflict.baseVersion}</span>
+      <span>最新版本：v${conflict.currentVersion}</span>
+      <span>冲突字段：${Object.keys(conflict.conflictingFields).length} 个</span>
+    </div>
+  `;
+
+  let html = '';
+  for (const [field, info] of Object.entries(conflict.conflictingFields)) {
+    const label = FIELD_LABELS[field] || field;
+    const serverVal = formatConflictValue(info.serverValue);
+    const clientVal = formatConflictValue(info.clientValue);
+    html += `
+      <div class="conflict-field" data-conflict-field="${field}">
+        <div class="conflict-field-header">
+          <span class="conflict-field-name">${label}</span>
+          <div class="conflict-field-choice">
+            <button class="secondary active-server" data-choice-server="${field}">采用最新</button>
+            <button class="secondary" data-choice-client="${field}">保留我的</button>
+          </div>
+        </div>
+        <div class="conflict-field-values">
+          <div class="conflict-value server">
+            <span class="conflict-value-label">最新数据（服务器）</span>
+            <div class="conflict-value-content">${serverVal}</div>
+          </div>
+          <div class="conflict-value client">
+            <span class="conflict-value-label">我的修改（本地）</span>
+            <div class="conflict-value-content">${clientVal}</div>
+          </div>
+        </div>
+      </div>
+    `;
+  }
+  fieldsEl.innerHTML = html;
+  modal.style.display = 'flex';
+
+  fieldsEl.querySelectorAll('[data-choice-server]').forEach(btn => {
+    btn.onclick = () => setFieldChoice(btn.dataset.choiceServer, 'server');
+  });
+  fieldsEl.querySelectorAll('[data-choice-client]').forEach(btn => {
+    btn.onclick = () => setFieldChoice(btn.dataset.choiceClient, 'client');
+  });
+}
+
+function formatConflictValue(val) {
+  if (val === null || val === undefined) return '<em class="meta">（空）</em>';
+  if (typeof val === 'object') return '<code style="font-size:11px">' + escapeHtml(JSON.stringify(val)) + '</code>';
+  return escapeHtml(String(val));
+}
+
+function setFieldChoice(field, choice) {
+  const fieldEl = document.querySelector(`[data-conflict-field="${field}"]`);
+  if (!fieldEl) return;
+  const srvBtn = fieldEl.querySelector(`[data-choice-server="${field}"]`);
+  const cliBtn = fieldEl.querySelector(`[data-choice-client="${field}"]`);
+  if (choice === 'server') {
+    srvBtn.classList.add('active-server');
+    srvBtn.classList.remove('secondary');
+    cliBtn.classList.remove('active-client');
+    cliBtn.classList.add('secondary');
+  } else {
+    cliBtn.classList.add('active-client');
+    cliBtn.classList.remove('secondary');
+    srvBtn.classList.remove('active-server');
+    srvBtn.classList.add('secondary');
+  }
+}
+
+function collectFieldResolutions() {
+  const resolution = {};
+  if (!pendingConflict) return resolution;
+  for (const field of Object.keys(pendingConflict.conflictingFields)) {
+    const fieldEl = document.querySelector(`[data-conflict-field="${field}"]`);
+    const srvBtn = fieldEl?.querySelector(`[data-choice-server="${field}"]`);
+    const cliBtn = fieldEl?.querySelector(`[data-choice-client="${field}"]`);
+    if (cliBtn && cliBtn.classList.contains('active-client')) {
+      resolution[field] = 'keep_client';
+    } else {
+      resolution[field] = 'keep_server';
+    }
+  }
+  return resolution;
+}
+
+function closeConflictModal() {
+  document.querySelector('#conflictModal').style.display = 'none';
+  pendingConflict = null;
+  pendingConflictCallback = null;
+  pendingConflictOriginalPayload = null;
+}
+
+async function resolveConflictAndRetry(path, options, extra) {
+  if (!pendingConflict || !pendingConflictCallback) return;
+  const resolution = collectFieldResolutions();
+  try {
+    const result = await api(path, options, {
+      _baseVersion: extra._baseVersion,
+      _conflictResolution: resolution
+    });
+    closeConflictModal();
+    if (pendingConflictCallback) pendingConflictCallback(result);
+  } catch(err) {
+    if (err.conflict) {
+      alert('仍然存在冲突，请重新选择：' + (err.message || ''));
+    } else {
+      closeConflictModal();
+      alert('提交失败：' + (err.message || '未知错误'));
+    }
+  }
+}
+
+function bindConflictModalEvents() {
+  document.querySelector('#closeConflictModal').onclick = closeConflictModal;
+  document.querySelector('#conflictCancel').onclick = closeConflictModal;
+  document.querySelector('#conflictKeepAllServer').onclick = () => {
+    if (!pendingConflict) return;
+    for (const field of Object.keys(pendingConflict.conflictingFields)) {
+      setFieldChoice(field, 'server');
+    }
+  };
+  document.querySelector('#conflictKeepAllClient').onclick = () => {
+    if (!pendingConflict) return;
+    for (const field of Object.keys(pendingConflict.conflictingFields)) {
+      setFieldChoice(field, 'client');
+    }
+  };
+  const modal = document.querySelector('#conflictModal');
+  modal.addEventListener('click', (e) => {
+    if (e.target === modal) closeConflictModal();
+  });
+}
+
+async function apiWithConflict(path, options, getVersionFn, onSuccess) {
+  try {
+    const baseVersion = getVersionFn ? getVersionFn() : 0;
+    const result = await api(path, options, { _baseVersion: baseVersion });
+    if (onSuccess) onSuccess(result);
+    return result;
+  } catch(err) {
+    if (err.conflict) {
+      return new Promise((resolve) => {
+        showConflictModal(err.conflict, options?.body ? JSON.parse(options.body) : {}, async (finalResult) => {
+          if (onSuccess) onSuccess(finalResult);
+          resolve(finalResult);
+        });
+        const origResolve = resolve;
+        const retryBtn = document.createElement('button');
+        retryBtn.style.display = 'none';
+        document.querySelector('#conflictKeepAllServer').insertAdjacentElement('afterend',
+          Object.assign(retryBtn = document.createElement('button'), {
+            textContent: '确认并提交',
+            className: 'gold',
+            onclick: async () => {
+              try {
+                const resolution = collectFieldResolutions();
+                const result = await api(path, options, { _baseVersion: err.conflict.baseVersion, _conflictResolution: resolution });
+                closeConflictModal();
+                if (onSuccess) onSuccess(result);
+                origResolve(result);
+              } catch(e) {
+                alert('提交失败：' + (e.message || '未知错误'));
+              }
+            }
+          })
+        );
+      });
+    }
+    alert(err.message || '操作失败');
+    throw err;
+  }
 }
 
 function switchTab(tab) {
@@ -167,10 +383,24 @@ function updateCompareButton() {
 
 function bindCardEvents() {
   document.querySelectorAll('[data-status]').forEach(sel => sel.onchange = async () => {
+    const id = sel.dataset.status;
     const createdBy = prompt('请输入修改人姓名（用于审计记录）：') || '未指定用户';
     const reason = prompt('请输入修改状态的原因：') || '更新状态';
-    await api('/api/items/'+sel.dataset.status, { method:'PATCH', body: JSON.stringify({ status: sel.value, createdBy, reason }) });
-    await load();
+    const currentItem = items.find(x => x.id === id || x.code === id);
+    const baseVersion = currentItem ? currentItem._version : 0;
+    try {
+      await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ status: sel.value, createdBy, reason }) }, { _baseVersion: baseVersion });
+      await load();
+    } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, { status: sel.value, createdBy, reason }, () => {
+          load();
+        });
+        return;
+      }
+      alert(err.message || '操作失败');
+      return;
+    }
   });
   document.querySelectorAll('[data-note]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.note;
@@ -178,8 +408,21 @@ function bindCardEvents() {
     if (note) {
       const createdBy = prompt('请输入记录人姓名（用于审计记录）：') || '未指定用户';
       const reason = prompt('请输入备注原因：') || ('追加备注');
-      await api('/api/items/'+id+'/logs', { method:'POST', body: JSON.stringify({ step:'备注', note, createdBy, reason }) });
-      await load();
+      const currentItem = items.find(x => x.id === id || x.code === id);
+      const baseVersion = currentItem ? currentItem._version : 0;
+      try {
+        await api('/api/items/'+id+'/logs', { method:'POST', body: JSON.stringify({ step:'备注', note, createdBy, reason }) }, { _baseVersion: baseVersion });
+        await load();
+      } catch(err) {
+        if (err.conflict) {
+          showConflictModal(err.conflict, { step:'备注', note, createdBy, reason }, () => {
+            load();
+          });
+          return;
+        }
+        alert(err.message || '操作失败');
+        return;
+      }
     }
   });
   document.querySelectorAll('[data-storage-edit]').forEach(btn => btn.onclick = async () => {
@@ -199,8 +442,20 @@ function bindCardEvents() {
     if (trimmed === defaultVal) return;
     const createdBy = prompt('请输入修改人姓名（用于审计记录）：') || '未指定用户';
     const reason = prompt('请输入修改存放位置的原因：') || '更新存放位置';
-    await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed, createdBy, reason }) });
-    await load();
+    const baseVersion = item ? item._version : 0;
+    try {
+      await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed, createdBy, reason }) }, { _baseVersion: baseVersion });
+      await load();
+    } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, { storage: trimmed, createdBy, reason }, () => {
+          load();
+        });
+        return;
+      }
+      alert(err.message || '操作失败');
+      return;
+    }
   });
   document.querySelectorAll('[data-compare]').forEach(cb => cb.onchange = () => {
     const id = cb.dataset.compare;
@@ -366,8 +621,41 @@ function render() {
     templateTable.innerHTML = templates.map(t => {
       return '<tr><td>'+(t.isDefault?'<span class="pill gold">默认</span> ':'')+t.name+'</td><td>'+(t.paper||'-')+'</td><td>'+(t.water||'-')+'</td><td>'+(t.grindingTime||'-')+'</td><td>'+(t.speed||'-')+'</td><td class="meta">'+(t.observationPoints||'-')+'</td><td><div style="display:flex;gap:6px"><button class="secondary" data-default="'+t.id+'" '+(t.isDefault?'disabled style="opacity:0.5"':'')+'>设为默认</button><button class="secondary" style="background:var(--warn)" data-delete="'+t.id+'">删除</button></div></td></tr>';
     }).join('');
-    document.querySelectorAll('[data-default]').forEach(btn => btn.onclick = async () => { await api('/api/templates/'+btn.dataset.default+'/default', { method:'POST' }); await load(); });
-    document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = async () => { if (confirm('确定删除此模板？')) { await api('/api/templates/'+btn.dataset.delete, { method:'DELETE' }); await load(); } });
+    document.querySelectorAll('[data-default]').forEach(btn => btn.onclick = async () => {
+      const id = btn.dataset.default;
+      const tpl = templates.find(t => t.id === id);
+      const baseVersion = tpl ? tpl._version : 0;
+      try {
+        await api('/api/templates/'+id+'/default', { method:'POST' }, { _baseVersion: baseVersion });
+        await load();
+      } catch(err) {
+        if (err.conflict) {
+          showConflictModal(err.conflict, {}, () => {
+            load();
+          });
+          return;
+        }
+        alert(err.message || '操作失败');
+      }
+    });
+    document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = async () => {
+      if (!confirm('确定删除此模板？')) return;
+      const id = btn.dataset.delete;
+      const tpl = templates.find(t => t.id === id);
+      const baseVersion = tpl ? tpl._version : 0;
+      try {
+        await api('/api/templates/'+id, { method:'DELETE' }, { _baseVersion: baseVersion });
+        await load();
+      } catch(err) {
+        if (err.conflict) {
+          showConflictModal(err.conflict, {}, () => {
+            load();
+          });
+          return;
+        }
+        alert(err.message || '操作失败');
+      }
+    });
   }
 
   const scoringStatsEl = document.querySelector('#scoringStats');
@@ -427,8 +715,19 @@ function render() {
           else if (i === idx) orders[r.id] = idx - 1;
           else orders[r.id] = r.order ?? i;
         });
-        await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify({ orders }) });
-        await load();
+        const payload = { orders };
+        try {
+          await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify(payload) });
+          await load();
+        } catch(err) {
+          if (err.conflict) {
+            showConflictModal(err.conflict, payload, () => {
+              load();
+            });
+            return;
+          }
+          alert(err.message || '操作失败');
+        }
       });
       document.querySelectorAll('[data-sr-down]').forEach(btn => btn.onclick = async () => {
         const id = btn.dataset.srDown;
@@ -440,14 +739,37 @@ function render() {
           else if (i === idx) orders[r.id] = idx + 1;
           else orders[r.id] = r.order ?? i;
         });
-        await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify({ orders }) });
-        await load();
+        const payload = { orders };
+        try {
+          await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify(payload) });
+          await load();
+        } catch(err) {
+          if (err.conflict) {
+            showConflictModal(err.conflict, payload, () => {
+              load();
+            });
+            return;
+          }
+          alert(err.message || '操作失败');
+        }
       });
       document.querySelectorAll('[data-sr-edit]').forEach(btn => btn.onclick = () => openScoringRuleEditor(btn.dataset.srEdit));
       document.querySelectorAll('[data-sr-delete]').forEach(btn => btn.onclick = async () => {
-        if (confirm('确定删除此评分规则？')) {
-          await api('/api/scoring-rules/'+btn.dataset.srDelete, { method:'DELETE' });
+        if (!confirm('确定删除此评分规则？')) return;
+        const id = btn.dataset.srDelete;
+        const rule = scoringRules.find(r => r.id === id);
+        const baseVersion = rule ? rule._version : 0;
+        try {
+          await api('/api/scoring-rules/'+id, { method:'DELETE' }, { _baseVersion: baseVersion });
           await load();
+        } catch(err) {
+          if (err.conflict) {
+            showConflictModal(err.conflict, {}, () => {
+              load();
+            });
+            return;
+          }
+          alert(err.message || '操作失败');
         }
       });
     }
@@ -609,22 +931,34 @@ function bindTaskEvents() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     const goToTest = confirm('任务完成！\n\n点击「确定」跳转到试磨记录页面录入数据。\n点击「取消」稍后补录试磨数据。');
-    await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify({}) });
-    if (goToTest) {
-      itemSelect.value = task.itemId;
-      const defaultTpl = templates.find(t => t.isDefault);
-      if (defaultTpl) {
-        templateSelect.value = defaultTpl.id;
-        applyTemplate(defaultTpl.id);
+    const baseVersion = task ? task._version : 0;
+    const payload = {};
+    try {
+      await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
+      if (goToTest) {
+        itemSelect.value = task.itemId;
+        const defaultTpl = templates.find(t => t.isDefault);
+        if (defaultTpl) {
+          templateSelect.value = defaultTpl.id;
+          applyTemplate(defaultTpl.id);
+        }
+        switchTab('items');
+        setTimeout(() => {
+          const actionFormEl = document.querySelector('#actionForm');
+          if (actionFormEl) actionFormEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 100);
+        return;
       }
-      switchTab('items');
-      setTimeout(() => {
-        const actionFormEl = document.querySelector('#actionForm');
-        if (actionFormEl) actionFormEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      }, 100);
-      return;
+      await load();
+    } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, payload, () => {
+          load();
+        });
+        return;
+      }
+      alert(err.message || '操作失败');
     }
-    await load();
   });
 
   document.querySelectorAll('[data-task-reschedule]').forEach(btn => btn.onclick = async () => {
@@ -633,22 +967,112 @@ function bindTaskEvents() {
     if (!task) return;
     const newDate = prompt('输入新的计划日期', task.scheduledDate);
     if (!newDate) return;
-    await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify({ scheduledDate: newDate }) });
-    await load();
+    const baseVersion = task ? task._version : 0;
+    const payload = { scheduledDate: newDate };
+    try {
+      await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
+      await load();
+    } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, payload, () => {
+          load();
+        });
+        return;
+      }
+      alert(err.message || '操作失败');
+    }
   });
 
   document.querySelectorAll('[data-task-start]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.taskStart;
-    await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify({ status: '进行中' }) });
-    await load();
+    const task = tasks.find(t => t.id === id);
+    const baseVersion = task ? task._version : 0;
+    const payload = { status: '进行中' };
+    try {
+      await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
+      await load();
+    } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, payload, () => {
+          load();
+        });
+        return;
+      }
+      alert(err.message || '操作失败');
+    }
   });
 
   document.querySelectorAll('[data-task-delete]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.taskDelete;
     if (!confirm('确定删除此任务？')) return;
-    await api('/api/tasks/'+id, { method:'DELETE' });
-    await load();
+    const task = tasks.find(t => t.id === id);
+    const baseVersion = task ? task._version : 0;
+    try {
+      await api('/api/tasks/'+id, { method:'DELETE' }, { _baseVersion: baseVersion });
+      await load();
+    } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, {}, () => {
+          load();
+        });
+        return;
+      }
+      alert(err.message || '操作失败');
+    }
   });
+}
+
+function updateSyncStatus() {
+  const bar = document.querySelector('#syncStatusBar');
+  if (!bar) return;
+  const connected = window.DataSync ? window.DataSync.isConnected() : false;
+  bar.style.display = '';
+  bar.className = 'sync-status-bar ' + (connected ? 'connected' : 'disconnected');
+  document.querySelector('#syncStatusIcon').textContent = connected ? '✓' : '⚠';
+  document.querySelector('#syncStatusText').textContent = connected ? '已连接 · 实时同步' : '连接断开 · 使用本地数据';
+}
+
+function initDataSync() {
+  if (!window.DataSync) return;
+  const store = window.DataSync.getStore();
+  window.DataSync.subscribe((event) => {
+    const { collection, changeType, recordId, record } = event;
+    let needsReload = false;
+    switch(collection) {
+      case 'items':
+      case 'batches':
+      case 'templates':
+      case 'tasks':
+      case 'scoringRules':
+      case 'importBatches':
+        needsReload = true;
+        break;
+    }
+    if (needsReload) {
+      showSyncNotification(event);
+      setTimeout(() => load(), 300);
+    }
+  });
+
+  setInterval(updateSyncStatus, 5000);
+  updateSyncStatus();
+}
+
+function showSyncNotification(event) {
+  const labels = {
+    items: '墨锭', batches: '批次', templates: '方案模板',
+    tasks: '任务', scoringRules: '评分规则', importBatches: '导入批次'
+  };
+  const actionLabels = { created: '新增', updated: '更新', deleted: '删除', batch_updated: '批量更新' };
+  const name = labels[event.collection] || event.collection;
+  const action = actionLabels[event.changeType] || event.changeType;
+  const bar = document.querySelector('#syncStatusBar');
+  if (bar) {
+    bar.className = 'sync-status-bar syncing';
+    document.querySelector('#syncStatusIcon').textContent = '🔄';
+    document.querySelector('#syncStatusText').textContent = `${action} ${name}数据，正在刷新...`;
+    setTimeout(updateSyncStatus, 1500);
+  }
 }
 
 async function load() {
@@ -674,29 +1098,79 @@ async function load() {
 
 createForm.onsubmit = async event => {
   event.preventDefault();
-  await api('/api/items', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(createForm).entries())) });
-  createForm.reset();
-  await load();
+  const payload = Object.fromEntries(new FormData(createForm).entries());
+  try {
+    await api('/api/items', { method:'POST', body: JSON.stringify(payload) });
+    createForm.reset();
+    await load();
+  } catch(err) {
+    if (err.conflict) {
+      showConflictModal(err.conflict, payload, () => {
+        createForm.reset();
+        load();
+      });
+      return;
+    }
+    alert(err.message || '操作失败');
+  }
 };
 actionForm.onsubmit = async event => {
   event.preventDefault();
-  await api('/api/items/'+itemSelect.value+'/action', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(actionForm).entries())) });
-  actionForm.reset();
-  await load();
+  const payload = Object.fromEntries(new FormData(actionForm).entries());
+  const id = itemSelect.value;
+  const currentItem = items.find(x => x.id === id || x.code === id);
+  const baseVersion = currentItem ? currentItem._version : 0;
+  try {
+    await api('/api/items/'+id+'/action', { method:'POST', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
+    actionForm.reset();
+    await load();
+  } catch(err) {
+    if (err.conflict) {
+      showConflictModal(err.conflict, payload, () => {
+        actionForm.reset();
+        load();
+      });
+      return;
+    }
+    alert(err.message || '操作失败');
+  }
 };
 batchForm.onsubmit = async event => {
   event.preventDefault();
-  await api('/api/batches', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(batchForm).entries())) });
-  batchForm.reset();
-  await load();
+  const payload = Object.fromEntries(new FormData(batchForm).entries());
+  try {
+    await api('/api/batches', { method:'POST', body: JSON.stringify(payload) });
+    batchForm.reset();
+    await load();
+  } catch(err) {
+    if (err.conflict) {
+      showConflictModal(err.conflict, payload, () => {
+        batchForm.reset();
+        load();
+      });
+      return;
+    }
+    alert(err.message || '操作失败');
+  }
 };
 templateForm.onsubmit = async event => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(templateForm).entries());
   data.isDefault = templateForm.querySelector('[name="isDefault"]').checked;
-  await api('/api/templates', { method:'POST', body: JSON.stringify(data) });
-  templateForm.reset();
-  await load();
+  try {
+    await api('/api/templates', { method:'POST', body: JSON.stringify(data) });
+    templateForm.reset();
+    await load();
+  } catch(err) {
+    if (err.conflict) {
+      showConflictModal(err.conflict, data, () => {
+        templateForm.reset();
+        load();
+      });
+      return;
+    }
+    alert(err.message || '操作失败');
+  }
 };
 templateSelect.onchange = () => {
   if (templateSelect.value) {
@@ -741,7 +1215,31 @@ if (scoringRuleForm) {
     };
     try {
       if (editingScoringRuleId) {
-        await api('/api/scoring-rules/' + editingScoringRuleId, { method:'PATCH', body: JSON.stringify(data) });
+        const currentRule = scoringRules.find(r => r.id === editingScoringRuleId);
+        const baseVersion = currentRule ? currentRule._version : 0;
+        try {
+          await api('/api/scoring-rules/' + editingScoringRuleId, { method:'PATCH', body: JSON.stringify(data) }, { _baseVersion: baseVersion });
+        } catch(err) {
+          if (err.conflict) {
+            showConflictModal(err.conflict, data, () => {
+              editingScoringRuleId = null;
+              scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
+              scoringRuleForm.querySelector('button').textContent = '保存规则';
+              scoringRuleForm.reset();
+              if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
+              if (srResultStatusCustom) {
+                srResultStatusCustom.style.display = 'none';
+                srResultStatusCustom.value = '';
+              }
+              const srSelect = document.querySelector('#srResultStatus');
+              if (srSelect) srSelect.disabled = false;
+              document.querySelector('#srOrder').value = '0';
+              load();
+            });
+            return;
+          }
+          throw err;
+        }
         editingScoringRuleId = null;
         scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
         scoringRuleForm.querySelector('button').textContent = '保存规则';
@@ -759,6 +1257,21 @@ if (scoringRuleForm) {
       document.querySelector('#srOrder').value = '0';
       await load();
     } catch(err) {
+      if (err.conflict) {
+        showConflictModal(err.conflict, data, () => {
+          scoringRuleForm.reset();
+          if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
+          if (srResultStatusCustom) {
+            srResultStatusCustom.style.display = 'none';
+            srResultStatusCustom.value = '';
+          }
+          const srSelect = document.querySelector('#srResultStatus');
+          if (srSelect) srSelect.disabled = false;
+          document.querySelector('#srOrder').value = '0';
+          load();
+        });
+        return;
+      }
       const msg = err && err.message ? err.message : '操作失败';
       const detail = err && err.errors ? '\n' + err.errors.join('\n') : '';
       alert(msg + detail);
@@ -829,8 +1342,17 @@ taskForm.onsubmit = async event => {
     document.querySelector('#taskDate').value = today;
     await load();
   } catch(err) {
-      alert('创建失败：' + err.message);
+    if (err.conflict) {
+      showConflictModal(err.conflict, data, () => {
+        taskForm.reset();
+        const today = new Date().toISOString().slice(0,10);
+        document.querySelector('#taskDate').value = today;
+        load();
+      });
+      return;
     }
+    alert('创建失败：' + err.message);
+  }
 };
 taskStatusFilter.onchange = renderTasks;
 taskAssigneeFilter.onchange = renderTasks;
@@ -1163,16 +1685,26 @@ async function doRestoreVersion(itemId, versionNum) {
   }
   const createdBy = prompt('请输入恢复操作人姓名：', '未指定用户') || '未指定用户';
   const reason = prompt('请输入恢复原因：', '恢复至 v' + versionNum) || ('恢复至 v' + versionNum);
+  const baseVersion = item ? item._version : 0;
+  const payload = { createdBy, reason };
   try {
     const result = await api('/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum + '/restore', {
       method: 'POST',
-      body: JSON.stringify({ createdBy, reason })
-    });
+      body: JSON.stringify(payload)
+    }, { _baseVersion: baseVersion });
     alert('✓ 恢复成功！已创建新版本 v' + result.restoredVersion.version);
     document.querySelector('#versionHistoryModal').style.display = 'none';
     document.querySelector('#versionDetailModal').style.display = 'none';
     await load();
   } catch(e) {
+    if (e.conflict) {
+      showConflictModal(e.conflict, payload, () => {
+        document.querySelector('#versionHistoryModal').style.display = 'none';
+        document.querySelector('#versionDetailModal').style.display = 'none';
+        load();
+      });
+      return;
+    }
     alert('恢复失败：' + e.message);
   }
 }
@@ -1298,13 +1830,32 @@ function bindVersionModalEvents() {
     if (hasUpdates) payload.updates = updates;
     if (appendLog) payload.appendLog = appendLog;
     if (appendTest) payload.appendTest = appendTest;
+    const currentItem = items.find(x => x.id === currentHistoryItemId || x.code === currentHistoryItemId);
+    const baseVersion = currentItem ? currentItem._version : 0;
     try {
       document.querySelector('#submitRevisionBtn').disabled = true;
       document.querySelector('#submitRevisionBtn').textContent = '提交中...';
-      const result = await api('/api/items/' + encodeURIComponent(currentHistoryItemId) + '/versions', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      let result;
+      try {
+        result = await api('/api/items/' + encodeURIComponent(currentHistoryItemId) + '/versions', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        }, { _baseVersion: baseVersion });
+      } catch(e) {
+        if (e.conflict) {
+          showConflictModal(e.conflict, payload, (finalResult) => {
+            alert('✓ 修订成功！已创建新版本 v' + finalResult.version.version);
+            document.querySelector('#revisionModal').style.display = 'none';
+            document.querySelector('#submitRevisionBtn').disabled = false;
+            document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
+            load();
+          });
+          document.querySelector('#submitRevisionBtn').disabled = false;
+          document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
+          return;
+        }
+        throw e;
+      }
       alert('✓ 修订成功！已创建新版本 v' + result.version.version);
       document.querySelector('#revisionModal').style.display = 'none';
       await load();
@@ -1328,4 +1879,6 @@ if (importBtn2) {
 
 renderForms();
 bindVersionModalEvents();
+bindConflictModalEvents();
+initDataSync();
 load();

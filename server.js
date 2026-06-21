@@ -11,7 +11,8 @@ import {
   getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
   getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions,
   previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch,
-  getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch
+  getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch,
+  streamEvents
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -134,6 +135,8 @@ const server = http.createServer(async (req, res) => {
     const scoringRuleId = url.pathname.match(/^\/api\/scoring-rules\/([^/]+)$/);
     if (scoringRuleId && req.method === "PATCH") return updateScoringRule(req, res, scoringRuleId[1]);
     if (scoringRuleId && req.method === "DELETE") return deleteScoringRule(req, res, scoringRuleId[1]);
+
+    if (req.method === "GET" && url.pathname === "/api/events/stream") return streamEvents(req, res);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {

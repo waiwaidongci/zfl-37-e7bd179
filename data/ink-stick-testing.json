@@ -1,22 +1,1042 @@
 {
   "batches": [
     {
+      "id": "BAT-20260621-HFNJ",
+      "code": "B999",
+      "smokeSource": "测试烟料",
+      "receiveDate": "2026-06-21",
+      "note": "测试批次",
+      "_version": 1,
+      "_createdAt": "2026-06-21",
+      "_createdBy": "未指定用户",
+      "_updatedAt": "2026-06-21",
+      "_updatedBy": "未指定用户"
+    },
+    {
       "id": "BAT-20260611-01",
       "code": "B001",
       "smokeSource": "黄山松烟",
       "receiveDate": "2026-06-01",
-      "note": "春季入料，干燥度良好"
+      "note": "春季入料，干燥度良好",
+      "_version": 1,
+      "_createdAt": "2026-06-01",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-01",
+      "_updatedBy": "系统迁移"
     },
     {
       "id": "BAT-20260611-02",
       "code": "B002",
       "smokeSource": "桐油烟",
       "receiveDate": "2026-06-10",
-      "note": "新批次试样"
+      "note": "新批次试样",
+      "_version": 1,
+      "_createdAt": "2026-06-10",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-10",
+      "_updatedBy": "系统迁移"
     }
   ],
   "importBatches": [],
   "items": [
+    {
+      "id": "IS-1782042331539",
+      "status": "待试磨",
+      "code": "IS-CONF",
+      "smokeSource": "测试烟料",
+      "storage": "位置B",
+      "logs": [
+        {
+          "at": "2026-06-21T11:45:31.539Z",
+          "step": "建档",
+          "note": "创建墨锭"
+        },
+        {
+          "at": "2026-06-21T11:45:31.587Z",
+          "step": "存放位置",
+          "note": "从 初始位置 移至 位置A"
+        },
+        {
+          "at": "2026-06-21T11:45:49.202Z",
+          "step": "存放位置",
+          "note": "从 位置A 移至 位置B"
+        }
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "createdAt": "2026-06-21T11:45:31.539Z",
+          "createdBy": "未指定用户",
+          "reason": "墨锭建档",
+          "action": "create",
+          "parentVersion": null,
+          "snapshot": {
+            "status": "待试磨",
+            "storage": "初始位置",
+            "smokeSource": "测试烟料",
+            "glueRatio": "",
+            "ageYears": null,
+            "batchId": "",
+            "logs": [
+              {
+                "at": "2026-06-21T11:45:31.539Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              }
+            ],
+            "tests": []
+          },
+          "changes": null
+        },
+        {
+          "version": 2,
+          "createdAt": "2026-06-21T11:45:31.587Z",
+          "createdBy": "未指定用户",
+          "reason": "更新墨锭信息",
+          "action": "revise",
+          "parentVersion": 1,
+          "snapshot": {
+            "status": "待试磨",
+            "storage": "位置A",
+            "smokeSource": "测试烟料",
+            "glueRatio": "",
+            "ageYears": null,
+            "batchId": "",
+            "logs": [
+              {
+                "at": "2026-06-21T11:45:31.539Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:45:31.587Z",
+                "step": "存放位置",
+                "note": "从 初始位置 移至 位置A"
+              }
+            ],
+            "tests": []
+          },
+          "changes": {
+            "storage": {
+              "before": "初始位置",
+              "after": "位置A"
+            },
+            "logsAdded": [
+              {
+                "at": "2026-06-21T11:45:31.587Z",
+                "step": "存放位置",
+                "note": "从 初始位置 移至 位置A"
+              }
+            ]
+          }
+        },
+        {
+          "version": 3,
+          "createdAt": "2026-06-21T11:45:49.202Z",
+          "createdBy": "未指定用户",
+          "reason": "更新墨锭信息",
+          "action": "revise",
+          "parentVersion": 2,
+          "snapshot": {
+            "status": "待试磨",
+            "storage": "位置B",
+            "smokeSource": "测试烟料",
+            "glueRatio": "",
+            "ageYears": null,
+            "batchId": "",
+            "logs": [
+              {
+                "at": "2026-06-21T11:45:31.539Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:45:31.587Z",
+                "step": "存放位置",
+                "note": "从 初始位置 移至 位置A"
+              },
+              {
+                "at": "2026-06-21T11:45:49.202Z",
+                "step": "存放位置",
+                "note": "从 位置A 移至 位置B"
+              }
+            ],
+            "tests": []
+          },
+          "changes": {
+            "storage": {
+              "before": "位置A",
+              "after": "位置B"
+            },
+            "logsAdded": [
+              {
+                "at": "2026-06-21T11:45:49.202Z",
+                "step": "存放位置",
+                "note": "从 位置A 移至 位置B"
+              }
+            ]
+          }
+        }
+      ],
+      "currentVersion": 3,
+      "_version": 3,
+      "_createdAt": "2026-06-21T11:45:31.539Z",
+      "_createdBy": "未指定用户",
+      "_updatedAt": "2026-06-21T11:45:49.202Z",
+      "_updatedBy": "未指定用户",
+      "_changeLog": [
+        {
+          "version": 2,
+          "snapshot": {
+            "id": "IS-1782042331539",
+            "status": "待试磨",
+            "code": "IS-CONF",
+            "smokeSource": "测试烟料",
+            "storage": "位置A",
+            "logs": [
+              {
+                "at": "2026-06-21T11:45:31.539Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:45:31.587Z",
+                "step": "存放位置",
+                "note": "从 初始位置 移至 位置A"
+              }
+            ],
+            "versions": [
+              {
+                "version": 1,
+                "createdAt": "2026-06-21T11:45:31.539Z",
+                "createdBy": "未指定用户",
+                "reason": "墨锭建档",
+                "action": "create",
+                "parentVersion": null,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "初始位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:45:31.539Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": null
+              },
+              {
+                "version": 2,
+                "createdAt": "2026-06-21T11:45:31.587Z",
+                "createdBy": "未指定用户",
+                "reason": "更新墨锭信息",
+                "action": "revise",
+                "parentVersion": 1,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "位置A",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:45:31.539Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:45:31.587Z",
+                      "step": "存放位置",
+                      "note": "从 初始位置 移至 位置A"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": {
+                  "storage": {
+                    "before": "初始位置",
+                    "after": "位置A"
+                  },
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T11:45:31.587Z",
+                      "step": "存放位置",
+                      "note": "从 初始位置 移至 位置A"
+                    }
+                  ]
+                }
+              }
+            ],
+            "currentVersion": 2,
+            "_version": 1,
+            "_createdAt": "2026-06-21T11:45:31.539Z",
+            "_createdBy": "未指定用户",
+            "_updatedAt": "2026-06-21T11:45:31.539Z",
+            "_updatedBy": "未指定用户"
+          },
+          "at": "2026-06-21T11:45:31.587Z",
+          "by": "未指定用户"
+        },
+        {
+          "version": 3,
+          "snapshot": {
+            "id": "IS-1782042331539",
+            "status": "待试磨",
+            "code": "IS-CONF",
+            "smokeSource": "测试烟料",
+            "storage": "位置B",
+            "logs": [
+              {
+                "at": "2026-06-21T11:45:31.539Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:45:31.587Z",
+                "step": "存放位置",
+                "note": "从 初始位置 移至 位置A"
+              },
+              {
+                "at": "2026-06-21T11:45:49.202Z",
+                "step": "存放位置",
+                "note": "从 位置A 移至 位置B"
+              }
+            ],
+            "versions": [
+              {
+                "version": 1,
+                "createdAt": "2026-06-21T11:45:31.539Z",
+                "createdBy": "未指定用户",
+                "reason": "墨锭建档",
+                "action": "create",
+                "parentVersion": null,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "初始位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:45:31.539Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": null
+              },
+              {
+                "version": 2,
+                "createdAt": "2026-06-21T11:45:31.587Z",
+                "createdBy": "未指定用户",
+                "reason": "更新墨锭信息",
+                "action": "revise",
+                "parentVersion": 1,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "位置A",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:45:31.539Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:45:31.587Z",
+                      "step": "存放位置",
+                      "note": "从 初始位置 移至 位置A"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": {
+                  "storage": {
+                    "before": "初始位置",
+                    "after": "位置A"
+                  },
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T11:45:31.587Z",
+                      "step": "存放位置",
+                      "note": "从 初始位置 移至 位置A"
+                    }
+                  ]
+                }
+              },
+              {
+                "version": 3,
+                "createdAt": "2026-06-21T11:45:49.202Z",
+                "createdBy": "未指定用户",
+                "reason": "更新墨锭信息",
+                "action": "revise",
+                "parentVersion": 2,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "位置B",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:45:31.539Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:45:31.587Z",
+                      "step": "存放位置",
+                      "note": "从 初始位置 移至 位置A"
+                    },
+                    {
+                      "at": "2026-06-21T11:45:49.202Z",
+                      "step": "存放位置",
+                      "note": "从 位置A 移至 位置B"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": {
+                  "storage": {
+                    "before": "位置A",
+                    "after": "位置B"
+                  },
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T11:45:49.202Z",
+                      "step": "存放位置",
+                      "note": "从 位置A 移至 位置B"
+                    }
+                  ]
+                }
+              }
+            ],
+            "currentVersion": 3,
+            "_version": 2,
+            "_createdAt": "2026-06-21T11:45:31.539Z",
+            "_createdBy": "未指定用户",
+            "_updatedAt": "2026-06-21T11:45:31.587Z",
+            "_updatedBy": "未指定用户",
+            "_changeLog": [
+              {
+                "version": 2,
+                "snapshot": {
+                  "id": "IS-1782042331539",
+                  "status": "待试磨",
+                  "code": "IS-CONF",
+                  "smokeSource": "测试烟料",
+                  "storage": "位置A",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:45:31.539Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:45:31.587Z",
+                      "step": "存放位置",
+                      "note": "从 初始位置 移至 位置A"
+                    }
+                  ],
+                  "versions": [
+                    {
+                      "version": 1,
+                      "createdAt": "2026-06-21T11:45:31.539Z",
+                      "createdBy": "未指定用户",
+                      "reason": "墨锭建档",
+                      "action": "create",
+                      "parentVersion": null,
+                      "snapshot": {
+                        "status": "待试磨",
+                        "storage": "初始位置",
+                        "smokeSource": "测试烟料",
+                        "glueRatio": "",
+                        "ageYears": null,
+                        "batchId": "",
+                        "logs": [
+                          {
+                            "at": "2026-06-21T11:45:31.539Z",
+                            "step": "建档",
+                            "note": "创建墨锭"
+                          }
+                        ],
+                        "tests": []
+                      },
+                      "changes": null
+                    },
+                    {
+                      "version": 2,
+                      "createdAt": "2026-06-21T11:45:31.587Z",
+                      "createdBy": "未指定用户",
+                      "reason": "更新墨锭信息",
+                      "action": "revise",
+                      "parentVersion": 1,
+                      "snapshot": {
+                        "status": "待试磨",
+                        "storage": "位置A",
+                        "smokeSource": "测试烟料",
+                        "glueRatio": "",
+                        "ageYears": null,
+                        "batchId": "",
+                        "logs": [
+                          {
+                            "at": "2026-06-21T11:45:31.539Z",
+                            "step": "建档",
+                            "note": "创建墨锭"
+                          },
+                          {
+                            "at": "2026-06-21T11:45:31.587Z",
+                            "step": "存放位置",
+                            "note": "从 初始位置 移至 位置A"
+                          }
+                        ],
+                        "tests": []
+                      },
+                      "changes": {
+                        "storage": {
+                          "before": "初始位置",
+                          "after": "位置A"
+                        },
+                        "logsAdded": [
+                          {
+                            "at": "2026-06-21T11:45:31.587Z",
+                            "step": "存放位置",
+                            "note": "从 初始位置 移至 位置A"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "currentVersion": 2,
+                  "_version": 1,
+                  "_createdAt": "2026-06-21T11:45:31.539Z",
+                  "_createdBy": "未指定用户",
+                  "_updatedAt": "2026-06-21T11:45:31.539Z",
+                  "_updatedBy": "未指定用户"
+                },
+                "at": "2026-06-21T11:45:31.587Z",
+                "by": "未指定用户"
+              }
+            ]
+          },
+          "at": "2026-06-21T11:45:49.202Z",
+          "by": "未指定用户"
+        }
+      ]
+    },
+    {
+      "id": "IS-1782042219239",
+      "status": "待试磨",
+      "code": "IS-TEST",
+      "smokeSource": "测试烟料",
+      "storage": "冲突测试位置",
+      "logs": [
+        {
+          "at": "2026-06-21T11:43:39.239Z",
+          "step": "建档",
+          "note": "创建墨锭"
+        },
+        {
+          "at": "2026-06-21T11:43:54.800Z",
+          "step": "存放位置",
+          "note": "从 测试位置 移至 新位置"
+        },
+        {
+          "at": "2026-06-21T11:44:05.928Z",
+          "step": "存放位置",
+          "note": "从 新位置 移至 冲突测试位置"
+        }
+      ],
+      "versions": [
+        {
+          "version": 1,
+          "createdAt": "2026-06-21T11:43:39.239Z",
+          "createdBy": "未指定用户",
+          "reason": "墨锭建档",
+          "action": "create",
+          "parentVersion": null,
+          "snapshot": {
+            "status": "待试磨",
+            "storage": "测试位置",
+            "smokeSource": "测试烟料",
+            "glueRatio": "",
+            "ageYears": null,
+            "batchId": "",
+            "logs": [
+              {
+                "at": "2026-06-21T11:43:39.239Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              }
+            ],
+            "tests": []
+          },
+          "changes": null
+        },
+        {
+          "version": 2,
+          "createdAt": "2026-06-21T11:43:54.800Z",
+          "createdBy": "未指定用户",
+          "reason": "更新墨锭信息",
+          "action": "revise",
+          "parentVersion": 1,
+          "snapshot": {
+            "status": "待试磨",
+            "storage": "新位置",
+            "smokeSource": "测试烟料",
+            "glueRatio": "",
+            "ageYears": null,
+            "batchId": "",
+            "logs": [
+              {
+                "at": "2026-06-21T11:43:39.239Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:43:54.800Z",
+                "step": "存放位置",
+                "note": "从 测试位置 移至 新位置"
+              }
+            ],
+            "tests": []
+          },
+          "changes": {
+            "storage": {
+              "before": "测试位置",
+              "after": "新位置"
+            },
+            "logsAdded": [
+              {
+                "at": "2026-06-21T11:43:54.800Z",
+                "step": "存放位置",
+                "note": "从 测试位置 移至 新位置"
+              }
+            ]
+          }
+        },
+        {
+          "version": 3,
+          "createdAt": "2026-06-21T11:44:05.928Z",
+          "createdBy": "未指定用户",
+          "reason": "更新墨锭信息",
+          "action": "revise",
+          "parentVersion": 2,
+          "snapshot": {
+            "status": "待试磨",
+            "storage": "冲突测试位置",
+            "smokeSource": "测试烟料",
+            "glueRatio": "",
+            "ageYears": null,
+            "batchId": "",
+            "logs": [
+              {
+                "at": "2026-06-21T11:43:39.239Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:43:54.800Z",
+                "step": "存放位置",
+                "note": "从 测试位置 移至 新位置"
+              },
+              {
+                "at": "2026-06-21T11:44:05.928Z",
+                "step": "存放位置",
+                "note": "从 新位置 移至 冲突测试位置"
+              }
+            ],
+            "tests": []
+          },
+          "changes": {
+            "storage": {
+              "before": "新位置",
+              "after": "冲突测试位置"
+            },
+            "logsAdded": [
+              {
+                "at": "2026-06-21T11:44:05.928Z",
+                "step": "存放位置",
+                "note": "从 新位置 移至 冲突测试位置"
+              }
+            ]
+          }
+        }
+      ],
+      "currentVersion": 3,
+      "_version": 3,
+      "_createdAt": "2026-06-21T11:43:39.239Z",
+      "_createdBy": "未指定用户",
+      "_updatedAt": "2026-06-21T11:44:05.928Z",
+      "_updatedBy": "未指定用户",
+      "_changeLog": [
+        {
+          "version": 2,
+          "snapshot": {
+            "id": "IS-1782042219239",
+            "status": "待试磨",
+            "code": "IS-TEST",
+            "smokeSource": "测试烟料",
+            "storage": "新位置",
+            "logs": [
+              {
+                "at": "2026-06-21T11:43:39.239Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:43:54.800Z",
+                "step": "存放位置",
+                "note": "从 测试位置 移至 新位置"
+              }
+            ],
+            "versions": [
+              {
+                "version": 1,
+                "createdAt": "2026-06-21T11:43:39.239Z",
+                "createdBy": "未指定用户",
+                "reason": "墨锭建档",
+                "action": "create",
+                "parentVersion": null,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "测试位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:43:39.239Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": null
+              },
+              {
+                "version": 2,
+                "createdAt": "2026-06-21T11:43:54.800Z",
+                "createdBy": "未指定用户",
+                "reason": "更新墨锭信息",
+                "action": "revise",
+                "parentVersion": 1,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "新位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:43:39.239Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:43:54.800Z",
+                      "step": "存放位置",
+                      "note": "从 测试位置 移至 新位置"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": {
+                  "storage": {
+                    "before": "测试位置",
+                    "after": "新位置"
+                  },
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T11:43:54.800Z",
+                      "step": "存放位置",
+                      "note": "从 测试位置 移至 新位置"
+                    }
+                  ]
+                }
+              }
+            ],
+            "currentVersion": 2,
+            "_version": 1,
+            "_createdAt": "2026-06-21T11:43:39.239Z",
+            "_createdBy": "未指定用户",
+            "_updatedAt": "2026-06-21T11:43:39.239Z",
+            "_updatedBy": "未指定用户"
+          },
+          "at": "2026-06-21T11:43:54.800Z",
+          "by": "未指定用户"
+        },
+        {
+          "version": 3,
+          "snapshot": {
+            "id": "IS-1782042219239",
+            "status": "待试磨",
+            "code": "IS-TEST",
+            "smokeSource": "测试烟料",
+            "storage": "冲突测试位置",
+            "logs": [
+              {
+                "at": "2026-06-21T11:43:39.239Z",
+                "step": "建档",
+                "note": "创建墨锭"
+              },
+              {
+                "at": "2026-06-21T11:43:54.800Z",
+                "step": "存放位置",
+                "note": "从 测试位置 移至 新位置"
+              },
+              {
+                "at": "2026-06-21T11:44:05.928Z",
+                "step": "存放位置",
+                "note": "从 新位置 移至 冲突测试位置"
+              }
+            ],
+            "versions": [
+              {
+                "version": 1,
+                "createdAt": "2026-06-21T11:43:39.239Z",
+                "createdBy": "未指定用户",
+                "reason": "墨锭建档",
+                "action": "create",
+                "parentVersion": null,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "测试位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:43:39.239Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": null
+              },
+              {
+                "version": 2,
+                "createdAt": "2026-06-21T11:43:54.800Z",
+                "createdBy": "未指定用户",
+                "reason": "更新墨锭信息",
+                "action": "revise",
+                "parentVersion": 1,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "新位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:43:39.239Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:43:54.800Z",
+                      "step": "存放位置",
+                      "note": "从 测试位置 移至 新位置"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": {
+                  "storage": {
+                    "before": "测试位置",
+                    "after": "新位置"
+                  },
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T11:43:54.800Z",
+                      "step": "存放位置",
+                      "note": "从 测试位置 移至 新位置"
+                    }
+                  ]
+                }
+              },
+              {
+                "version": 3,
+                "createdAt": "2026-06-21T11:44:05.928Z",
+                "createdBy": "未指定用户",
+                "reason": "更新墨锭信息",
+                "action": "revise",
+                "parentVersion": 2,
+                "snapshot": {
+                  "status": "待试磨",
+                  "storage": "冲突测试位置",
+                  "smokeSource": "测试烟料",
+                  "glueRatio": "",
+                  "ageYears": null,
+                  "batchId": "",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:43:39.239Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:43:54.800Z",
+                      "step": "存放位置",
+                      "note": "从 测试位置 移至 新位置"
+                    },
+                    {
+                      "at": "2026-06-21T11:44:05.928Z",
+                      "step": "存放位置",
+                      "note": "从 新位置 移至 冲突测试位置"
+                    }
+                  ],
+                  "tests": []
+                },
+                "changes": {
+                  "storage": {
+                    "before": "新位置",
+                    "after": "冲突测试位置"
+                  },
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T11:44:05.928Z",
+                      "step": "存放位置",
+                      "note": "从 新位置 移至 冲突测试位置"
+                    }
+                  ]
+                }
+              }
+            ],
+            "currentVersion": 3,
+            "_version": 2,
+            "_createdAt": "2026-06-21T11:43:39.239Z",
+            "_createdBy": "未指定用户",
+            "_updatedAt": "2026-06-21T11:43:54.800Z",
+            "_updatedBy": "未指定用户",
+            "_changeLog": [
+              {
+                "version": 2,
+                "snapshot": {
+                  "id": "IS-1782042219239",
+                  "status": "待试磨",
+                  "code": "IS-TEST",
+                  "smokeSource": "测试烟料",
+                  "storage": "新位置",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T11:43:39.239Z",
+                      "step": "建档",
+                      "note": "创建墨锭"
+                    },
+                    {
+                      "at": "2026-06-21T11:43:54.800Z",
+                      "step": "存放位置",
+                      "note": "从 测试位置 移至 新位置"
+                    }
+                  ],
+                  "versions": [
+                    {
+                      "version": 1,
+                      "createdAt": "2026-06-21T11:43:39.239Z",
+                      "createdBy": "未指定用户",
+                      "reason": "墨锭建档",
+                      "action": "create",
+                      "parentVersion": null,
+                      "snapshot": {
+                        "status": "待试磨",
+                        "storage": "测试位置",
+                        "smokeSource": "测试烟料",
+                        "glueRatio": "",
+                        "ageYears": null,
+                        "batchId": "",
+                        "logs": [
+                          {
+                            "at": "2026-06-21T11:43:39.239Z",
+                            "step": "建档",
+                            "note": "创建墨锭"
+                          }
+                        ],
+                        "tests": []
+                      },
+                      "changes": null
+                    },
+                    {
+                      "version": 2,
+                      "createdAt": "2026-06-21T11:43:54.800Z",
+                      "createdBy": "未指定用户",
+                      "reason": "更新墨锭信息",
+                      "action": "revise",
+                      "parentVersion": 1,
+                      "snapshot": {
+                        "status": "待试磨",
+                        "storage": "新位置",
+                        "smokeSource": "测试烟料",
+                        "glueRatio": "",
+                        "ageYears": null,
+                        "batchId": "",
+                        "logs": [
+                          {
+                            "at": "2026-06-21T11:43:39.239Z",
+                            "step": "建档",
+                            "note": "创建墨锭"
+                          },
+                          {
+                            "at": "2026-06-21T11:43:54.800Z",
+                            "step": "存放位置",
+                            "note": "从 测试位置 移至 新位置"
+                          }
+                        ],
+                        "tests": []
+                      },
+                      "changes": {
+                        "storage": {
+                          "before": "测试位置",
+                          "after": "新位置"
+                        },
+                        "logsAdded": [
+                          {
+                            "at": "2026-06-21T11:43:54.800Z",
+                            "step": "存放位置",
+                            "note": "从 测试位置 移至 新位置"
+                          }
+                        ]
+                      }
+                    }
+                  ],
+                  "currentVersion": 2,
+                  "_version": 1,
+                  "_createdAt": "2026-06-21T11:43:39.239Z",
+                  "_createdBy": "未指定用户",
+                  "_updatedAt": "2026-06-21T11:43:39.239Z",
+                  "_updatedBy": "未指定用户"
+                },
+                "at": "2026-06-21T11:43:54.800Z",
+                "by": "未指定用户"
+              }
+            ]
+          },
+          "at": "2026-06-21T11:44:05.928Z",
+          "by": "未指定用户"
+        }
+      ]
+    },
     {
       "id": "IS-001",
       "code": "IS-001",
@@ -262,7 +1282,12 @@
           "ruleName": "优异（已入藏）",
           "ruleHint": "品质优异，正式入藏存档"
         }
-      ]
+      ],
+      "_version": 1,
+      "_createdAt": "2026-06-11",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-11",
+      "_updatedBy": "系统迁移"
     },
     {
       "id": "IS-002",
@@ -428,7 +1453,12 @@
           }
         }
       ],
-      "currentVersion": 2
+      "currentVersion": 2,
+      "_version": 1,
+      "_createdAt": "2026-06-21T03:50:28.907Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T03:50:28.907Z",
+      "_updatedBy": "系统迁移"
     }
   ],
   "templates": [
@@ -440,7 +1470,12 @@
       "grindingTime": "10分钟",
       "observationPoints": "墨色层次、沉淀情况、出墨速度",
       "speed": "中",
-      "isDefault": true
+      "isDefault": true,
+      "_version": 1,
+      "_createdAt": "2026-06-21T11:42:42.588Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T11:42:42.588Z",
+      "_updatedBy": "系统迁移"
     },
     {
       "id": "TPL-002",
@@ -450,7 +1485,12 @@
       "grindingTime": "15分钟",
       "observationPoints": "墨色浓淡、光泽度、颗粒细腻度",
       "speed": "慢",
-      "isDefault": false
+      "isDefault": false,
+      "_version": 1,
+      "_createdAt": "2026-06-21T11:42:42.588Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T11:42:42.588Z",
+      "_updatedBy": "系统迁移"
     }
   ],
   "scoringRules": [
@@ -463,7 +1503,12 @@
       "hintText": "试磨评分合格，需继续观察使用效果",
       "order": 2,
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-01-01T00:00:00.000Z"
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "_version": 1,
+      "_createdAt": "2026-01-01T00:00:00.000Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-01-01T00:00:00.000Z",
+      "_updatedBy": "系统迁移"
     },
     {
       "id": "SCR-DEFAULT-LOW",
@@ -474,7 +1519,12 @@
       "hintText": "试磨评分偏低，建议调整参数后复测",
       "order": 3,
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-01-01T00:00:00.000Z"
+      "updatedAt": "2026-01-01T00:00:00.000Z",
+      "_version": 1,
+      "_createdAt": "2026-01-01T00:00:00.000Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-01-01T00:00:00.000Z",
+      "_updatedBy": "系统迁移"
     },
     {
       "id": "SCR-1782037046751HB8D",
@@ -485,7 +1535,12 @@
       "hintText": "品质优异，正式入藏存档",
       "order": 0,
       "createdAt": "2026-06-21T10:17:26.751Z",
-      "updatedAt": "2026-06-21T10:17:26.751Z"
+      "updatedAt": "2026-06-21T10:17:26.751Z",
+      "_version": 1,
+      "_createdAt": "2026-06-21T10:17:26.751Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T10:17:26.751Z",
+      "_updatedBy": "系统迁移"
     }
   ],
   "tasks": []

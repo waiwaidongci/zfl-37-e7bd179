@@ -3,6 +3,9 @@ import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { initScoringRules, newScoringRuleId } from "./scoringRules.js";
+import { ensureMetaFields, bumpMetaFields, deepClone } from "./dataLayer.js";
+import { appendChangeLog } from "./conflictDetection.js";
+import { emitChange, CHANGE_TYPES } from "./syncEvents.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, "data", "ink-stick-testing.json");
@@ -174,6 +177,26 @@ export async function loadDb() {
       changed = true;
     }
   }
+
+  for (const batch of db.batches) {
+    if (ensureMetaFields(batch, { createdAt: batch.receiveDate })) changed = true;
+  }
+  for (const tpl of db.templates) {
+    if (ensureMetaFields(tpl)) changed = true;
+  }
+  for (const task of db.tasks) {
+    if (ensureMetaFields(task, { createdAt: task.createdAt })) changed = true;
+  }
+  for (const imp of db.importBatches) {
+    if (ensureMetaFields(imp, { createdAt: imp.importedAt, createdBy: imp.importedBy })) changed = true;
+  }
+  for (const rule of db.scoringRules || []) {
+    if (ensureMetaFields(rule, { createdAt: rule.createdAt, updatedAt: rule.updatedAt })) changed = true;
+  }
+  for (const item of db.items) {
+    if (ensureMetaFields(item, { createdAt: (item.logs && item.logs[0]) ? item.logs[0].at : undefined })) changed = true;
+  }
+
   if (changed) await saveDb(db);
   return db;
 }
@@ -458,3 +481,38 @@ export function buildComparisonReport(items, ids) {
     items: reportItems
   };
 }
+
+export function prepareNewRecord(record, options = {}) {
+  ensureMetaFields(record, options);
+  return record;
+}
+
+export function updateRecordWithVersion(record, updates, options = {}) {
+  const oldSnapshot = deepClone(record);
+  Object.assign(record, updates);
+  bumpMetaFields(record, options);
+  appendChangeLog(record, oldSnapshot);
+  return record;
+}
+
+export function findInCollection(db, collection, id) {
+  const list = db[collection] || [];
+  if (collection === "items") {
+    return list.find(x => x.id === id || x.code === id);
+  }
+  if (collection === "batches") {
+    return list.find(x => x.id === id || x.code === id);
+  }
+  if (collection === "importBatches") {
+    return list.find(x => x.id === id || x.code === id);
+  }
+  return list.find(x => x.id === id);
+}
+
+export function saveAndNotify(db, collection, changeType, record, extra = {}) {
+  return saveDb(db).then(() => {
+    emitChange(collection, changeType, record, extra);
+  });
+}
+
+export { CHANGE_TYPES };
