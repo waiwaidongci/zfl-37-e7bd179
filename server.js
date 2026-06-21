@@ -12,6 +12,7 @@ import {
   getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions,
   previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch,
   getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch,
+  getItemLifecycle, transitionLifecycle, getLifecycleStates,
   streamEvents
 } from "./routes.js";
 
@@ -137,6 +138,12 @@ const server = http.createServer(async (req, res) => {
     if (scoringRuleId && req.method === "DELETE") return deleteScoringRule(req, res, scoringRuleId[1]);
 
     if (req.method === "GET" && url.pathname === "/api/events/stream") return streamEvents(req, res);
+
+    if (req.method === "GET" && url.pathname === "/api/lifecycle/states") return getLifecycleStates(req, res);
+
+    const lifecycleItem = url.pathname.match(/^\/api\/items\/([^/]+)\/lifecycle$/);
+    if (lifecycleItem && req.method === "GET") return getItemLifecycle(req, res, lifecycleItem[1]);
+    if (lifecycleItem && req.method === "POST") return transitionLifecycle(req, res, lifecycleItem[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {

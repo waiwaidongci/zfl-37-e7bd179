@@ -1,5 +1,6 @@
 const fields = [["code","墨锭编号","text"],["smokeSource","烟料来源","text"],["glueRatio","胶料比例","text"],["ageYears","存放年限","number"],["storage","存放位置","text"]];
 const stages = ["待试磨","已试磨","重点观察"];
+const LIFECYCLE_STATES = ["建档","入库","已试磨","复测","重点观察","归档"];
 const extraFields = [["paper","试磨纸张"],["water","加水量"],["speed","出墨速度"],["colorLayer","墨色层次"],["sediment","沉淀情况"],["score","评分"]];
 const batchFields = [["code","批次编号","text"],["smokeSource","烟料来源","text"],["receiveDate","入库日期","date"],["note","备注说明","textarea"]];
 const templateFields = [["name","方案名称","text"],["paper","试磨纸张","text"],["water","加水量","text"],["grindingTime","研磨时长","text"],["speed","出墨速度","text"],["observationPoints","观察重点","textarea"]];
@@ -344,12 +345,14 @@ function switchTab(tab) {
   document.querySelector('#tab-templates').style.display = tab === 'templates' ? '' : 'none';
   document.querySelector('#tab-tasks').style.display = tab === 'tasks' ? '' : 'none';
   document.querySelector('#tab-scoring').style.display = tab === 'scoring' ? '' : 'none';
+  document.querySelector('#tab-lifecycle').style.display = tab === 'lifecycle' ? '' : 'none';
   document.querySelector('#view-items').style.display = tab === 'items' ? '' : 'none';
   document.querySelector('#view-batches').style.display = tab === 'batches' ? '' : 'none';
   document.querySelector('#view-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#view-templates').style.display = tab === 'templates' ? '' : 'none';
   document.querySelector('#view-tasks').style.display = tab === 'tasks' ? '' : 'none';
   document.querySelector('#view-scoring').style.display = tab === 'scoring' ? '' : 'none';
+  document.querySelector('#view-lifecycle').style.display = tab === 'lifecycle' ? '' : 'none';
   if (tab === 'storage') {
     showKanbanView();
   }
@@ -357,10 +360,11 @@ function switchTab(tab) {
 
 function statusClass(status) {
   const s = (status || '').toString();
-  if (s === '待试磨') return 'pending';
+  if (s === '待试磨' || s === '建档' || s === '入库') return 'pending';
   if (s === '已试磨') return 'done';
   if (s === '重点观察') return 'watch';
-  if (/复测|重测|返修/.test(s)) return 'retest';
+  if (s === '复测' || s === '建议复测' || /复测|重测|返修/.test(s)) return 'retest';
+  if (s === '归档') return 'archived';
   if (/完成|合格|通过|优秀/.test(s)) return 'done';
   if (/观察|注意|检查|待/.test(s)) return 'watch';
   if (/进行|中|处理|评估/.test(s)) return 'ongoing';
@@ -527,6 +531,9 @@ function bindCardEvents() {
   });
   document.querySelectorAll('[data-revise]').forEach(btn => btn.onclick = () => {
     openRevisionModal(btn.dataset.revise);
+  });
+  document.querySelectorAll('[data-lifecycle]').forEach(btn => btn.onclick = () => {
+    openLifecycleDetail(btn.dataset.lifecycle);
   });
 }
 
@@ -837,6 +844,26 @@ function render() {
     renderStorageDetail();
   }
   updateCompareButton();
+
+  const lifecycleSelect = document.querySelector('#lifecycleItemSelect');
+  if (lifecycleSelect) {
+    const prevVal = lifecycleSelect.value;
+    lifecycleSelect.innerHTML = '<option value="">-- 请选择 --</option>' + items.map(item =>
+      '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.smokeSource || '')+' ['+(item.lifecycleState || '建档')+']</option>'
+    ).join('');
+    lifecycleSelect.value = prevVal;
+  }
+  const lifecycleStatsEl = document.querySelector('#lifecycleStats');
+  if (lifecycleStatsEl) {
+    const lcStats = {};
+    for (const s of LIFECYCLE_STATES) lcStats[s] = 0;
+    for (const item of items) {
+      const ls = item.lifecycleState || '建档';
+      if (lcStats[ls] === undefined) lcStats[ls] = 0;
+      lcStats[ls]++;
+    }
+    lifecycleStatsEl.innerHTML = Object.entries(lcStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
+  }
 }
 
 function cardHtml(item, showStorageEdit) {
@@ -881,7 +908,9 @@ function cardHtml(item, showStorageEdit) {
   '</div>';
   const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
   const itemStatusClass = statusClass(item.status);
-  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+itemStatusClass+'">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stagesDynamic.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  const lifecycleState = item.lifecycleState || '';
+  const lifecycleBadge = lifecycleState ? '<span class="pill lifecycle ' + statusClass(lifecycleState) + '">生命周期：' + lifecycleState + '</span>' : '';
+  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+itemStatusClass+'">'+item.status+'</span>'+lifecycleBadge+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stagesDynamic.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+'<button class="secondary gold" data-lifecycle="'+itemId+'" style="margin-top:6px">生命周期追踪</button>'+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
 }
 
 function getAssignees() {
@@ -1983,3 +2012,156 @@ bindVersionModalEvents();
 bindConflictModalEvents();
 initDataSync();
 load();
+
+const lifecycleItemSelect = document.querySelector('#lifecycleItemSelect');
+if (lifecycleItemSelect) {
+  lifecycleItemSelect.onchange = () => {
+    if (lifecycleItemSelect.value) {
+      openLifecycleDetail(lifecycleItemSelect.value);
+    } else {
+      document.querySelector('#lifecycleDetail').style.display = 'none';
+    }
+  };
+}
+
+let currentLifecycleItemId = null;
+
+async function openLifecycleDetail(itemId) {
+  currentLifecycleItemId = itemId;
+  const item = items.find(x => x.id === itemId || x.code === itemId);
+  if (!item) return;
+  const detailEl = document.querySelector('#lifecycleDetail');
+  detailEl.style.display = '';
+  document.querySelector('#lifecycleItemTitle').textContent =
+    (item.code || item.id) + ' · ' + (item.smokeSource || '') + ' — 生命周期追踪';
+  const stateEl = document.querySelector('#lifecycleCurrentState');
+  stateEl.textContent = item.lifecycleState || '建档';
+  stateEl.className = 'pill ' + statusClass(item.lifecycleState || '建档');
+  try {
+    const data = await api('/api/items/' + encodeURIComponent(itemId) + '/lifecycle');
+    renderLifecycleStateFlow(data.lifecycleState, data.availableTransitions);
+    renderLifecycleActions(data.availableTransitions, itemId);
+    renderLifecycleTimeline(data.timeline);
+  } catch(e) {
+    document.querySelector('#lifecycleStateFlow').innerHTML = '<div class="empty warn">加载失败：' + escapeHtml(e.message) + '</div>';
+    document.querySelector('#lifecycleTimeline').innerHTML = '';
+    document.querySelector('#lifecycleActions').innerHTML = '';
+  }
+}
+
+function renderLifecycleStateFlow(currentState, transitions) {
+  const flowEl = document.querySelector('#lifecycleStateFlow');
+  const reached = new Set();
+  reached.add(currentState);
+  const allowedNext = transitions.filter(t => t.allowed).map(t => t.to);
+  for (const t of transitions) {
+    reached.add(t.from);
+    reached.add(t.to);
+  }
+  let html = '<div class="lc-flow">';
+  for (const state of LIFECYCLE_STATES) {
+    const isCurrent = state === currentState;
+    const isAllowed = allowedNext.includes(state);
+    const cls = ['lc-flow-state'];
+    if (isCurrent) cls.push('current');
+    else if (isAllowed) cls.push('next');
+    else if (reached.has(state)) cls.push('reached');
+    else cls.push('future');
+    html += '<div class="' + cls.join(' ') + '">';
+    html += '<div class="lc-flow-dot"></div>';
+    html += '<div class="lc-flow-label">' + state + '</div>';
+    if (isCurrent) html += '<div class="lc-flow-tag">当前</div>';
+    html += '</div>';
+    if (state !== LIFECYCLE_STATES[LIFECYCLE_STATES.length - 1]) {
+      html += '<div class="lc-flow-arrow' + (isCurrent ? ' active' : '') + '">→</div>';
+    }
+  }
+  html += '</div>';
+  flowEl.innerHTML = html;
+}
+
+function renderLifecycleActions(transitions, itemId) {
+  const actionsEl = document.querySelector('#lifecycleActions');
+  if (!transitions || transitions.length === 0) {
+    actionsEl.innerHTML = '<div class="meta">当前状态无可用操作</div>';
+    return;
+  }
+  let html = '<div class="section-subtitle">可执行操作</div>';
+  html += '<div class="lc-actions-grid">';
+  for (const t of transitions) {
+    if (t.allowed) {
+      html += '<button class="lc-action-btn allowed" data-lc-action="' + t.action + '" data-lc-item="' + itemId + '">' +
+        t.label + ' → ' + t.to + '</button>';
+    } else {
+      html += '<button class="lc-action-btn disabled" disabled title="' + escapeHtml(t.reason || '') + '">' +
+        t.label + ' <span class="meta">(' + escapeHtml(t.reason || '不可用') + ')</span></button>';
+    }
+  }
+  html += '</div>';
+  actionsEl.innerHTML = html;
+  actionsEl.querySelectorAll('[data-lc-action]').forEach(btn => {
+    btn.onclick = async () => {
+      const action = btn.dataset.lcAction;
+      const id = btn.dataset.lcItem;
+      const item = items.find(x => x.id === id || x.code === id);
+      const baseVersion = item ? item._version : 0;
+      const createdBy = prompt('请输入操作人姓名：', '未指定用户') || '未指定用户';
+      const reason = prompt('请输入操作原因：', '') || '';
+      try {
+        await api('/api/items/' + encodeURIComponent(id) + '/lifecycle', {
+          method: 'POST',
+          body: JSON.stringify({ action, createdBy, reason })
+        }, { _baseVersion: baseVersion });
+        await load();
+        openLifecycleDetail(id);
+      } catch(err) {
+        if (err.conflict) {
+          showConflictModal(err.conflict, { action, createdBy, reason }, () => {
+            load();
+            openLifecycleDetail(id);
+          }, { path: '/api/items/' + encodeURIComponent(id) + '/lifecycle', options: { method: 'POST', body: JSON.stringify({ action, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { load(); openLifecycleDetail(id); } });
+          return;
+        }
+        alert('操作失败：' + (err.message || '未知错误'));
+      }
+    };
+  });
+}
+
+function renderLifecycleTimeline(timeline) {
+  const timelineEl = document.querySelector('#lifecycleTimeline');
+  if (!timeline || timeline.length === 0) {
+    timelineEl.innerHTML = '<div class="empty">暂无生命周期记录</div>';
+    return;
+  }
+  let html = '<div class="lc-timeline">';
+  for (const event of timeline) {
+    const typeCls = event.type === 'lifecycle' ? 'lifecycle' : (event.type === 'test' ? 'test' : 'log');
+    html += '<div class="lc-timeline-item ' + typeCls + '">';
+    html += '<div class="lc-timeline-dot"></div>';
+    html += '<div class="lc-timeline-content">';
+    html += '<div class="lc-timeline-time">' + formatDate(event.at) + '</div>';
+    if (event.type === 'lifecycle') {
+      html += '<div class="lc-timeline-title">' + escapeHtml(event.label || event.action) + '</div>';
+      html += '<div class="lc-timeline-detail">' +
+        '<span class="pill ' + statusClass(event.from) + '">' + escapeHtml(event.from) + '</span>' +
+        ' → ' +
+        '<span class="pill ' + statusClass(event.to) + '">' + escapeHtml(event.to) + '</span>' +
+      '</div>';
+    } else if (event.type === 'test') {
+      html += '<div class="lc-timeline-title">试磨记录' + (event.score !== undefined && event.score !== null ? ' · 评分 ' + event.score : '') + '</div>';
+      const details = [];
+      if (event.paper) details.push(event.paper);
+      if (event.water) details.push(event.water);
+      if (event.speed) details.push('速度:' + event.speed);
+      if (event.ruleName) details.push('规则:' + event.ruleName);
+      if (details.length) html += '<div class="lc-timeline-detail meta">' + escapeHtml(details.join('，')) + '</div>';
+    } else {
+      html += '<div class="lc-timeline-title">' + escapeHtml(event.step || '记录') + '</div>';
+      if (event.note) html += '<div class="lc-timeline-detail meta">' + escapeHtml(event.note) + '</div>';
+    }
+    html += '</div></div>';
+  }
+  html += '</div>';
+  timelineEl.innerHTML = html;
+}

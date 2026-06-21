@@ -4,6 +4,7 @@ import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoring
 import { detectConflict, resolveConflict, detectDeleteConflict } from "./conflictDetection.js";
 import { onDataChange } from "./syncEvents.js";
 import { COLLLECTIONS } from "./dataLayer.js";
+import { executeTransition, getAvailableTransitions, canTransition, buildTimeline, lifecycleToStatus, LIFECYCLE_STATE_LIST, getAllActions } from "./lifecycle.js";
 
 export async function body(req) {
   const chunks = [];
@@ -1233,4 +1234,73 @@ export async function previewRuleMatch(req, res) {
   }
   const match = matchRule(score, db.scoringRules || []);
   return send(res, 200, { score, match });
+}
+
+export async function getItemLifecycle(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return sendError(res, 404, "item_not_found", "墨锭不存在");
+  const transitions = getAvailableTransitions(item);
+  const timeline = buildTimeline(item);
+  const allActions = getAllActions();
+  return sendOk(res, {
+    lifecycleState: item.lifecycleState,
+    lifecycleHistory: item.lifecycleHistory || [],
+    availableTransitions: transitions,
+    timeline,
+    allActions
+  });
+}
+
+export async function transitionLifecycle(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return sendError(res, 404, "item_not_found", "墨锭不存在");
+  const input = await body(req);
+  const action = input.action;
+  if (!action) return sendError(res, 400, "action_required", "需要指定生命周期动作（action）");
+
+  const check = canTransition(item, action);
+  if (!check.allowed) {
+    return sendError(res, 409, "transition_not_allowed", check.reason);
+  }
+
+  const result = handleUpdatesWithConflict(COLLLECTIONS.ITEMS, item, input, (updates) => {
+    const transition = executeTransition(item, action);
+    if (!transition.success) {
+      return;
+    }
+    item.status = lifecycleToStatus(item.lifecycleState);
+    item.logs ||= [];
+    item.logs.push({
+      at: new Date().toISOString(),
+      step: "生命周期",
+      note: `${transition.previousState} → ${transition.newState}（${transition.label || action}）`
+    });
+    createVersion(item, {
+      createdBy: updates.createdBy || "未指定用户",
+      reason: updates.reason || (`生命周期变更：${transition.previousState} → ${transition.newState}`),
+      action: "revise"
+    });
+    updateRecordWithVersion(item, {}, { updatedBy: updates.createdBy || item._updatedBy });
+  });
+
+  if (!result.resolved && result.conflict) {
+    return sendConflict(res, result.conflict);
+  }
+
+  await saveAndNotify(db, COLLLECTIONS.ITEMS, CHANGE_TYPES.UPDATED, item);
+  return sendOk(res, {
+    lifecycleState: item.lifecycleState,
+    lifecycleHistory: item.lifecycleHistory || [],
+    status: item.status,
+    availableTransitions: getAvailableTransitions(item)
+  });
+}
+
+export async function getLifecycleStates(req, res) {
+  return sendOk(res, {
+    states: LIFECYCLE_STATE_LIST,
+    actions: getAllActions()
+  });
 }

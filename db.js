@@ -6,6 +6,7 @@ import { initScoringRules, newScoringRuleId } from "./scoringRules.js";
 import { ensureMetaFields, bumpMetaFields, deepClone } from "./dataLayer.js";
 import { appendChangeLog } from "./conflictDetection.js";
 import { emitChange, CHANGE_TYPES } from "./syncEvents.js";
+import { inferLifecycleState, lifecycleToStatus } from "./lifecycle.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, "data", "ink-stick-testing.json");
@@ -38,6 +39,8 @@ const seed = {
       "ageYears": 8,
       "storage": "恒湿柜B",
       "status": "已试磨",
+      "lifecycleState": "已试磨",
+      "lifecycleHistory": [{"from":"建档","to":"入库","action":"store","label":"入库","at":"2026-06-01"},{"from":"入库","to":"已试磨","action":"test","label":"试磨","at":"2026-06-11"}],
       "logs": [
         {
           "at": "2026-06-11",
@@ -56,6 +59,8 @@ const seed = {
       "ageYears": 3,
       "storage": "试样盒C",
       "status": "重点观察",
+      "lifecycleState": "重点观察",
+      "lifecycleHistory": [{"from":"建档","to":"入库","action":"store","label":"入库","at":"2026-06-10"},{"from":"入库","to":"已试磨","action":"test","label":"试磨","at":"2026-06-21T03:50:28.907Z"},{"from":"已试磨","to":"重点观察","action":"markWatching","label":"标记重点观察","at":"2026-06-21T03:50:28.907Z"}],
       "logs": [
         {
           "at": "2026-06-21T03:50:28.907Z",
@@ -178,6 +183,17 @@ export async function loadDb() {
     }
   }
 
+  for (const item of db.items) {
+    if (!item.lifecycleState) {
+      item.lifecycleState = inferLifecycleState(item);
+      changed = true;
+    }
+    if (!item.lifecycleHistory) {
+      item.lifecycleHistory = buildMigratedLifecycleHistory(item);
+      changed = true;
+    }
+  }
+
   for (const batch of db.batches) {
     if (ensureMetaFields(batch, { createdAt: batch.receiveDate })) changed = true;
   }
@@ -217,9 +233,66 @@ export function migrateItemToVersions(item) {
   item.currentVersion = 1;
 }
 
+function buildMigratedLifecycleHistory(item) {
+  const history = [];
+  const logs = item.logs || [];
+  const tests = item.tests || [];
+  if (logs.length > 0) {
+    history.push({
+      from: "建档",
+      to: item.storage && item.storage.trim() ? "入库" : "建档",
+      action: item.storage && item.storage.trim() ? "store" : "create",
+      label: item.storage && item.storage.trim() ? "入库" : "建档",
+      at: logs[0].at
+    });
+  }
+  if (item.storage && item.storage.trim() && history.length === 0) {
+    history.push({
+      from: "建档",
+      to: "入库",
+      action: "store",
+      label: "入库",
+      at: item._createdAt || new Date().toISOString()
+    });
+  }
+  if (tests.length > 0) {
+    const currentState = item.lifecycleState || inferLifecycleState(item);
+    if (currentState === "已试磨" || currentState === "重点观察" || currentState === "复测" || currentState === "归档") {
+      const storeEntry = history.find(h => h.to === "入库");
+      history.push({
+        from: storeEntry ? "入库" : "建档",
+        to: "试磨中",
+        action: "test",
+        label: "试磨",
+        at: tests[0].at
+      });
+    }
+    if (currentState === "重点观察" || currentState === "复测") {
+      history.push({
+        from: "已试磨",
+        to: currentState === "复测" ? "复测" : "重点观察",
+        action: currentState === "复测" ? "retest" : "markWatching",
+        label: currentState === "复测" ? "创建复测" : "标记重点观察",
+        at: tests.length > 1 ? tests[tests.length - 1].at : tests[0].at
+      });
+    }
+    if (currentState === "归档") {
+      history.push({
+        from: "已试磨",
+        to: "归档",
+        action: "archive",
+        label: "归档",
+        at: tests[tests.length - 1].at
+      });
+    }
+  }
+  return history;
+}
+
 export function buildItemSnapshot(item) {
   return {
     status: item.status || "待试磨",
+    lifecycleState: item.lifecycleState || "建档",
     storage: item.storage || "",
     smokeSource: item.smokeSource || "",
     glueRatio: item.glueRatio || "",
@@ -232,7 +305,7 @@ export function buildItemSnapshot(item) {
 
 export function computeChanges(oldSnapshot, newSnapshot) {
   const changes = {};
-  const fields = ["status", "storage", "smokeSource", "glueRatio", "ageYears", "batchId"];
+  const fields = ["status", "lifecycleState", "storage", "smokeSource", "glueRatio", "ageYears", "batchId"];
   for (const field of fields) {
     const oldVal = oldSnapshot[field];
     const newVal = newSnapshot[field];
@@ -287,6 +360,7 @@ export function restoreToVersion(item, versionNum, options) {
   if (!targetVersion) return null;
   const snap = targetVersion.snapshot;
   item.status = snap.status;
+  item.lifecycleState = snap.lifecycleState || inferLifecycleState(item);
   item.storage = snap.storage;
   item.smokeSource = snap.smokeSource;
   item.glueRatio = snap.glueRatio;

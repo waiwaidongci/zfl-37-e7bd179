@@ -27,6 +27,7 @@ export function page() {
         <div class="tab" data-tab="storage">存放位置看板</div>
         <div class="tab" data-tab="templates">试磨方案模板</div>
         <div class="tab" data-tab="scoring">评分规则配置</div>
+        <div class="tab" data-tab="lifecycle">生命周期追踪</div>
       </div>
       <div id="tab-items">
         <form id="createForm">
@@ -127,6 +128,32 @@ export function page() {
             <button type="button" class="secondary" id="srTestBtn">测试匹配</button>
           </div>
           <div id="srTestResult" class="meta" style="margin-top:8px"></div>
+        </div>
+      </div>
+      <div id="tab-lifecycle" style="display:none">
+        <div class="panel">
+          <h2>墨锭生命周期追踪</h2>
+          <div class="meta">追踪墨锭从建档、入库、试磨、复测、重点观察到归档的全过程。每次状态变化都经过校验，确保流程合规。</div>
+          <div style="margin-top:12px">
+            <label>选择墨锭查看生命周期</label>
+            <select id="lifecycleItemSelect"><option value="">-- 请选择 --</option></select>
+          </div>
+        </div>
+        <div id="lifecycleDetail" style="display:none;margin-top:14px">
+          <div class="panel">
+            <div class="section-title">
+              <h3 id="lifecycleItemTitle">生命周期</h3>
+              <span class="pill" id="lifecycleCurrentState">--</span>
+            </div>
+            <div id="lifecycleStateFlow" class="lifecycle-state-flow"></div>
+            <div id="lifecycleActions" class="lifecycle-actions" style="margin-top:16px"></div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <div class="section-title">
+              <h3>生命周期时间线</h3>
+            </div>
+            <div id="lifecycleTimeline" class="lifecycle-timeline"></div>
+          </div>
         </div>
       </div>
       <div id="tab-tasks" style="display:none">
@@ -257,6 +284,9 @@ export function page() {
           </table>
           <div id="scoringEmpty" class="empty" style="display:none">暂无评分规则，请在左侧新增规则。</div>
         </div>
+      </div>
+      <div id="view-lifecycle" style="display:none">
+        <div class="stats" id="lifecycleStats"></div>
       </div>
     </section>
   </main>

@@ -864,4 +864,234 @@ table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding
   margin-top: 4px;
 }
 
+.pill.lifecycle { background:#eef3fa; border-color:#b8c9e6; color:#4a6b9b; }
+.pill.archived { background:#f0f0ee; border-color:#cfd3cb; color:var(--muted); }
+
+.lifecycle-state-flow {
+  margin-top: 12px;
+}
+
+.lc-flow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  overflow-x: auto;
+  padding: 12px 8px;
+}
+
+.lc-flow-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  min-width: 72px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 2px solid transparent;
+  transition: all .2s ease;
+}
+
+.lc-flow-state.current {
+  background: linear-gradient(135deg, #fff8f0 0%, #fff3e0 100%);
+  border-color: var(--gold);
+  box-shadow: 0 2px 12px rgba(165,135,71,0.2);
+}
+
+.lc-flow-state.next {
+  background: #f1f7ed;
+  border-color: #cfe0bf;
+}
+
+.lc-flow-state.reached {
+  background: #f5f7f2;
+  border-color: var(--line);
+  opacity: 0.7;
+}
+
+.lc-flow-state.future {
+  background: #fafbf9;
+  border-color: #eee;
+  opacity: 0.45;
+}
+
+.lc-flow-dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--line);
+}
+
+.lc-flow-state.current .lc-flow-dot {
+  background: var(--gold);
+  box-shadow: 0 0 0 4px rgba(165,135,71,0.2);
+}
+
+.lc-flow-state.next .lc-flow-dot {
+  background: var(--accent);
+}
+
+.lc-flow-state.reached .lc-flow-dot {
+  background: #69736a;
+}
+
+.lc-flow-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.lc-flow-state.future .lc-flow-label {
+  color: var(--muted);
+}
+
+.lc-flow-tag {
+  font-size: 10px;
+  font-weight: 700;
+  background: var(--gold);
+  color: #fff;
+  padding: 1px 8px;
+  border-radius: 999px;
+}
+
+.lc-flow-arrow {
+  font-size: 18px;
+  color: var(--line);
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.lc-flow-arrow.active {
+  color: var(--gold);
+}
+
+.lifecycle-actions {
+  margin-top: 16px;
+}
+
+.lc-actions-grid {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.lc-action-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-weight: 700;
+  font-size: 13px;
+  border: 2px solid var(--accent);
+  background: var(--accent);
+  color: #fff;
+  cursor: pointer;
+  transition: all .15s ease;
+}
+
+.lc-action-btn.allowed:hover {
+  background: #3d5733;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(82,111,67,0.2);
+}
+
+.lc-action-btn.disabled {
+  background: #f5f7f2;
+  color: var(--muted);
+  border-color: var(--line);
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.lc-action-btn.disabled .meta {
+  font-weight: 400;
+}
+
+.lifecycle-timeline {
+  margin-top: 12px;
+}
+
+.lc-timeline {
+  position: relative;
+  padding-left: 28px;
+}
+
+.lc-timeline::before {
+  content: '';
+  position: absolute;
+  left: 10px;
+  top: 8px;
+  bottom: 8px;
+  width: 2px;
+  background: var(--line);
+}
+
+.lc-timeline-item {
+  position: relative;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: #f8faf6;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  transition: all .15s ease;
+}
+
+.lc-timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -24px;
+  top: 16px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid #fff;
+  box-shadow: 0 0 0 2px var(--accent);
+}
+
+.lc-timeline-item.lifecycle::before {
+  background: var(--gold);
+  box-shadow: 0 0 0 2px var(--gold);
+}
+
+.lc-timeline-item.test::before {
+  background: #4a6b9b;
+  box-shadow: 0 0 0 2px #4a6b9b;
+}
+
+.lc-timeline-item:hover {
+  border-color: var(--accent);
+  transform: translateX(2px);
+}
+
+.lc-timeline-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.lc-timeline-time {
+  font-size: 11px;
+  color: var(--muted);
+  font-family: monospace;
+}
+
+.lc-timeline-title {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.lc-timeline-detail {
+  font-size: 13px;
+  color: var(--muted);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.lc-timeline-detail .pill {
+  font-size: 11px;
+  padding: 1px 6px;
+}
+
 
