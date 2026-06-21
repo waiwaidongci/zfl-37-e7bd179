@@ -205,14 +205,50 @@ export function buildComparisonReport(items, ids) {
     .filter(Boolean);
 
   const reportItems = selected.map(item => {
-    const tests = item.tests || [];
-    const hasTests = tests.length > 0;
-    const scores = tests.map(t => t.score).filter(s => typeof s === "number");
+    const structuredTests = (item.tests || []).map(t => ({
+      source: "tests",
+      at: t.at,
+      score: typeof t.score === "number" ? t.score : null,
+      speed: t.speed || "",
+      colorLayer: t.colorLayer || "",
+      sediment: t.sediment || "",
+      paper: t.paper || "",
+      water: t.water || ""
+    }));
+
+    const logTests = (item.logs || [])
+      .filter(l => l.step === "试磨" && typeof l.score === "number")
+      .map(l => ({
+        source: "logs",
+        at: l.at,
+        score: l.score,
+        speed: "",
+        colorLayer: "",
+        sediment: "",
+        paper: "",
+        water: "",
+        note: l.note || ""
+      }));
+
+    const seen = new Map();
+    for (const t of structuredTests) {
+      if (t.at) seen.set(t.at, t);
+    }
+    for (const l of logTests) {
+      if (l.at && !seen.has(l.at)) {
+        seen.set(l.at, l);
+      }
+    }
+    const allTests = Array.from(seen.values())
+      .sort((a, b) => (a.at || "").localeCompare(b.at || ""));
+
+    const hasTests = allTests.length > 0;
+    const scores = allTests.map(t => t.score).filter(s => typeof s === "number");
     const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
-    const latestTest = tests.length ? tests[tests.length - 1] : null;
-    const speeds = tests.map(t => t.speed).filter(Boolean);
-    const colorLayers = tests.map(t => t.colorLayer).filter(Boolean);
-    const sediments = tests.map(t => t.sediment).filter(Boolean);
+    const latestTest = allTests.length ? allTests[allTests.length - 1] : null;
+    const speeds = allTests.map(t => t.speed).filter(Boolean);
+    const colorLayers = allTests.map(t => t.colorLayer).filter(Boolean);
+    const sediments = allTests.map(t => t.sediment).filter(Boolean);
 
     return {
       id: item.id,
@@ -222,7 +258,7 @@ export function buildComparisonReport(items, ids) {
       ageYears: item.ageYears ?? null,
       status: item.status || "",
       hasTests,
-      testCount: tests.length,
+      testCount: allTests.length,
       allScores: scores,
       avgScore,
       latestScore: latestTest ? latestTest.score : null,
@@ -232,14 +268,15 @@ export function buildComparisonReport(items, ids) {
       allSpeeds: [...new Set(speeds)],
       allColorLayers: [...new Set(colorLayers)],
       allSediments: [...new Set(sediments)],
-      testHistory: tests.slice().sort((a, b) => (b.at || "").localeCompare(a.at || "")).map(t => ({
+      testHistory: allTests.slice().sort((a, b) => (b.at || "").localeCompare(a.at || "")).map(t => ({
         at: t.at,
         score: t.score,
         speed: t.speed || "",
         colorLayer: t.colorLayer || "",
         sediment: t.sediment || "",
         paper: t.paper || "",
-        water: t.water || ""
+        water: t.water || "",
+        note: t.note || ""
       }))
     };
   });

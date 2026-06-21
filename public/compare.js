@@ -123,17 +123,21 @@ function renderReport(report) {
     }
     const historyHtml = item.testHistory.map(t => {
       const paperWater = [t.paper, t.water].filter(Boolean).join(' · ');
+      const hasDetails = t.speed || t.colorLayer || t.sediment || paperWater;
+      const detailsHtml = hasDetails
+        ? `${paperWater ? `<div class="meta">${paperWater}</div>` : ''}
+           <div class="test-history-details">
+             ${t.speed ? `<span>出墨：${t.speed}</span>` : ''}
+             ${t.colorLayer ? `<span>墨色：${t.colorLayer}</span>` : ''}
+             ${t.sediment ? `<span>沉淀：${t.sediment}</span>` : ''}
+           </div>`
+        : (t.note ? `<div class="meta">${t.note}</div>` : '');
       return `<div class="test-history-item">
         <div class="test-history-header">
           <span class="score ${scoreClass(t.score)}">${t.score}</span>
           <span class="meta">${formatDate(t.at)}</span>
         </div>
-        ${paperWater ? `<div class="meta">${paperWater}</div>` : ''}
-        <div class="test-history-details">
-          ${t.speed ? `<span>出墨：${t.speed}</span>` : ''}
-          ${t.colorLayer ? `<span>墨色：${t.colorLayer}</span>` : ''}
-          ${t.sediment ? `<span>沉淀：${t.sediment}</span>` : ''}
-        </div>
+        ${detailsHtml}
       </div>`;
     }).join('');
     return `<td><div class="test-history-list">${historyHtml}</div></td>`;
