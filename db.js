@@ -124,8 +124,130 @@ export async function loadDb() {
     if (!task.id) { task.id = newTaskId(); changed = true; }
     if (!task.status) { task.status = "待办"; changed = true; }
   }
+  for (const item of db.items) {
+    if (!item.versions || !Array.isArray(item.versions) || item.versions.length === 0) {
+      migrateItemToVersions(item);
+      changed = true;
+    }
+    if (!item.currentVersion) {
+      item.currentVersion = (item.versions && item.versions.length) ? item.versions.length : 1;
+      changed = true;
+    }
+  }
   if (changed) await saveDb(db);
   return db;
+}
+
+export function migrateItemToVersions(item) {
+  const snapshot = buildItemSnapshot(item);
+  const createdAt = (item.logs && item.logs.length > 0) ? item.logs[0].at : new Date().toISOString();
+  item.versions = [{
+    version: 1,
+    createdAt,
+    createdBy: "系统迁移",
+    reason: "初始版本（历史数据迁移）",
+    action: "create",
+    parentVersion: null,
+    snapshot,
+    changes: null
+  }];
+  item.currentVersion = 1;
+}
+
+export function buildItemSnapshot(item) {
+  return {
+    status: item.status || "待试磨",
+    storage: item.storage || "",
+    smokeSource: item.smokeSource || "",
+    glueRatio: item.glueRatio || "",
+    ageYears: item.ageYears ?? null,
+    batchId: item.batchId || "",
+    logs: JSON.parse(JSON.stringify(item.logs || [])),
+    tests: JSON.parse(JSON.stringify(item.tests || []))
+  };
+}
+
+export function computeChanges(oldSnapshot, newSnapshot) {
+  const changes = {};
+  const fields = ["status", "storage", "smokeSource", "glueRatio", "ageYears", "batchId"];
+  for (const field of fields) {
+    const oldVal = oldSnapshot[field];
+    const newVal = newSnapshot[field];
+    if (JSON.stringify(oldVal) !== JSON.stringify(newVal)) {
+      changes[field] = { before: oldVal, after: newVal };
+    }
+  }
+  const oldTests = oldSnapshot.tests || [];
+  const newTests = newSnapshot.tests || [];
+  if (newTests.length > oldTests.length) {
+    changes.testsAdded = newTests.slice(oldTests.length);
+  }
+  const oldLogs = oldSnapshot.logs || [];
+  const newLogs = newSnapshot.logs || [];
+  if (newLogs.length > oldLogs.length) {
+    changes.logsAdded = newLogs.slice(oldLogs.length);
+  }
+  return Object.keys(changes).length > 0 ? changes : null;
+}
+
+export function createVersion(item, options) {
+  const { createdBy, reason, action = "revise", parentVersion = null } = options || {};
+  if (!item.versions) {
+    migrateItemToVersions(item);
+  }
+  const lastVersion = item.versions[item.versions.length - 1];
+  const oldSnapshot = lastVersion ? lastVersion.snapshot : buildItemSnapshot(item);
+  const newSnapshot = buildItemSnapshot(item);
+  const changes = action === "restore" ? null : computeChanges(oldSnapshot, newSnapshot);
+  const newVersionNum = (lastVersion ? lastVersion.version : 0) + 1;
+  const version = {
+    version: newVersionNum,
+    createdAt: new Date().toISOString(),
+    createdBy: createdBy || "未指定用户",
+    reason: reason || "修订",
+    action,
+    parentVersion: parentVersion || (lastVersion ? lastVersion.version : null),
+    snapshot: newSnapshot,
+    changes
+  };
+  item.versions.push(version);
+  item.currentVersion = newVersionNum;
+  return version;
+}
+
+export function restoreToVersion(item, versionNum, options) {
+  const { createdBy, reason } = options || {};
+  const targetVersion = item.versions.find(v => v.version === versionNum);
+  if (!targetVersion) return null;
+  const snap = targetVersion.snapshot;
+  item.status = snap.status;
+  item.storage = snap.storage;
+  item.smokeSource = snap.smokeSource;
+  item.glueRatio = snap.glueRatio;
+  item.ageYears = snap.ageYears;
+  item.batchId = snap.batchId;
+  item.logs = JSON.parse(JSON.stringify(snap.logs || []));
+  item.tests = JSON.parse(JSON.stringify(snap.tests || []));
+  const lastVersion = item.versions[item.versions.length - 1];
+  const newVersionNum = (lastVersion ? lastVersion.version : 0) + 1;
+  const newSnapshot = buildItemSnapshot(item);
+  const restoredVersion = {
+    version: newVersionNum,
+    createdAt: new Date().toISOString(),
+    createdBy: createdBy || "未指定用户",
+    reason: reason || `恢复至版本 v${versionNum}`,
+    action: "restore",
+    parentVersion: versionNum,
+    snapshot: newSnapshot,
+    changes: { restoredFrom: versionNum }
+  };
+  item.versions.push(restoredVersion);
+  item.currentVersion = newVersionNum;
+  return restoredVersion;
+}
+
+export function newVersionId() {
+  return "VER-" + Date.now() + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
 export async function saveDb(db) {

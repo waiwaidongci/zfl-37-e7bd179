@@ -187,6 +187,95 @@ export function page() {
       </div>
     </section>
   </main>
+  <div id="versionHistoryModal" class="modal-overlay" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="versionHistoryTitle">版本历史</h2>
+        <button class="modal-close" id="closeVersionHistory">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="versionHistoryList"></div>
+      </div>
+    </div>
+  </div>
+  <div id="revisionModal" class="modal-overlay" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="revisionModalTitle">修订记录</h2>
+        <button class="modal-close" id="closeRevisionModal">×</button>
+      </div>
+      <div class="modal-body">
+        <form id="revisionForm">
+          <label>修订人</label>
+          <input name="createdBy" id="revisionCreatedBy" placeholder="请输入修订人姓名" required>
+          <label>修订原因</label>
+          <textarea name="reason" id="revisionReason" placeholder="请输入修订原因（必填）" required style="min-height:80px"></textarea>
+          <div id="revisionFieldsSection">
+            <div class="section-subtitle">字段修改（可选）</div>
+            <label>状态</label>
+            <select name="status" id="revisionStatus">
+              <option value="">不修改</option>
+            </select>
+            <label>存放位置</label>
+            <input name="storage" id="revisionStorage" placeholder="留空表示不修改">
+            <label>烟料来源</label>
+            <input name="smokeSource" id="revisionSmokeSource" placeholder="留空表示不修改">
+            <label>胶料比例</label>
+            <input name="glueRatio" id="revisionGlueRatio" placeholder="留空表示不修改">
+            <label>存放年限</label>
+            <input name="ageYears" id="revisionAgeYears" type="number" placeholder="留空表示不修改">
+          </div>
+          <div id="revisionLogSection" style="margin-top:14px">
+            <div class="section-subtitle">追加操作日志（可选）</div>
+            <label>操作类型</label>
+            <select name="logStep" id="revisionLogStep">
+              <option value="">不追加日志</option>
+              <option>备注</option>
+              <option>观察</option>
+              <option>检测</option>
+              <option>其他</option>
+            </select>
+            <label>日志内容</label>
+            <textarea name="logNote" id="revisionLogNote" placeholder="输入日志备注内容" style="min-height:60px"></textarea>
+          </div>
+          <div id="revisionTestSection" style="margin-top:14px">
+            <div class="section-subtitle">追加试磨记录（可选）</div>
+            <label>试磨纸张</label>
+            <input name="paper" id="revisionPaper">
+            <label>加水量</label>
+            <input name="water" id="revisionWater">
+            <label>出墨速度</label>
+            <input name="speed" id="revisionSpeed">
+            <label>墨色层次</label>
+            <input name="colorLayer" id="revisionColorLayer">
+            <label>沉淀情况</label>
+            <input name="sediment" id="revisionSediment">
+            <label>评分</label>
+            <input name="score" id="revisionScore" type="number" min="0" max="100">
+          </div>
+          <div style="margin-top:16px">
+            <button type="submit" id="submitRevisionBtn">提交修订（产生新版本）</button>
+            <button type="button" class="secondary" id="cancelRevisionBtn" style="margin-left:8px">取消</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+  <div id="versionDetailModal" class="modal-overlay" style="display:none">
+    <div class="modal-content wide">
+      <div class="modal-header">
+        <h2 id="versionDetailTitle">版本详情</h2>
+        <button class="modal-close" id="closeVersionDetail">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="versionDetailContent"></div>
+        <div style="margin-top:16px;display:flex;gap:8px;flex-wrap:wrap">
+          <button id="restoreVersionBtn" class="secondary gold">恢复到此版本</button>
+          <button id="cancelVersionDetailBtn" class="secondary">关闭</button>
+        </div>
+      </div>
+    </div>
+  </div>
   <script src="/public/app.js"></script>
 </body>
 </html>`;

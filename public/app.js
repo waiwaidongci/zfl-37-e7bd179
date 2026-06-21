@@ -141,14 +141,18 @@ function updateCompareButton() {
 
 function bindCardEvents() {
   document.querySelectorAll('[data-status]').forEach(sel => sel.onchange = async () => {
-    await api('/api/items/'+sel.dataset.status, { method:'PATCH', body: JSON.stringify({ status: sel.value }) });
+    const createdBy = prompt('请输入修改人姓名（用于审计记录）：') || '未指定用户';
+    const reason = prompt('请输入修改状态的原因：') || '更新状态';
+    await api('/api/items/'+sel.dataset.status, { method:'PATCH', body: JSON.stringify({ status: sel.value, createdBy, reason }) });
     await load();
   });
   document.querySelectorAll('[data-note]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.note;
     const note = prompt('记录备注');
     if (note) {
-      await api('/api/items/'+id+'/logs', { method:'POST', body: JSON.stringify({ step:'备注', note }) });
+      const createdBy = prompt('请输入记录人姓名（用于审计记录）：') || '未指定用户';
+      const reason = prompt('请输入备注原因：') || ('追加备注');
+      await api('/api/items/'+id+'/logs', { method:'POST', body: JSON.stringify({ step:'备注', note, createdBy, reason }) });
       await load();
     }
   });
@@ -167,7 +171,9 @@ function bindCardEvents() {
     if (newStorage === null) return;
     const trimmed = newStorage.trim();
     if (trimmed === defaultVal) return;
-    await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed }) });
+    const createdBy = prompt('请输入修改人姓名（用于审计记录）：') || '未指定用户';
+    const reason = prompt('请输入修改存放位置的原因：') || '更新存放位置';
+    await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed, createdBy, reason }) });
     await load();
   });
   document.querySelectorAll('[data-compare]').forEach(cb => cb.onchange = () => {
@@ -185,6 +191,12 @@ function bindCardEvents() {
       cb.closest('.card').classList.remove('card-selected');
     }
     updateCompareButton();
+  });
+  document.querySelectorAll('[data-version-history]').forEach(btn => btn.onclick = () => {
+    openVersionHistory(btn.dataset.versionHistory);
+  });
+  document.querySelectorAll('[data-revise]').forEach(btn => btn.onclick = () => {
+    openRevisionModal(btn.dataset.revise);
   });
 }
 
@@ -348,6 +360,9 @@ function cardHtml(item, showStorageEdit) {
   }
   const taskCount = itemTasks.length;
   const taskCountBadge = taskCount > 0 ? '<span class="pill task-count-badge">历史 '+taskCount+' 次</span>' : '';
+  const versionCount = (item.versions && item.versions.length) || 0;
+  const currentVer = item.currentVersion || 1;
+  const versionBadge = versionCount > 0 ? '<span class="pill ongoing">v'+currentVer+' / 共'+versionCount+'版</span>' : '';
   const taskHistory = itemTasks.length > 0
     ? '<div class="task-history"><div class="task-history-title">任务历史</div>' +
         itemTasks.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(t =>
@@ -365,7 +380,11 @@ function cardHtml(item, showStorageEdit) {
     ? '<button class="secondary gold" data-storage-edit="'+itemId+'" style="margin-top:4px">修改存放位置</button>'
     : '';
   const checkboxHtml = '<label class="card-checkbox"><input type="checkbox" data-compare="'+itemId+'" '+(isSelected?'checked':'')+'><span>加入对比</span></label>';
-  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  const versionActions = '<div class="version-card-actions">' +
+    '<button class="secondary" data-version-history="'+itemId+'">版本历史（'+versionCount+'）</button>' +
+    '<button class="secondary gold" data-revise="'+itemId+'">修订记录</button>' +
+  '</div>';
+  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
 }
 
 function getAssignees() {
@@ -619,5 +638,448 @@ if (clearCompareBtn) {
   };
 }
 
+let currentHistoryItemId = null;
+let currentDetailVersionData = null;
+
+function actionLabel(action) {
+  switch(action) {
+    case 'create': return { text: '创建', cls: 'create' };
+    case 'revise': return { text: '修订', cls: 'revise' };
+    case 'restore': return { text: '恢复', cls: 'restore' };
+    default: return { text: action || '操作', cls: 'revise' };
+  }
+}
+
+function formatDate(isoStr) {
+  if (!isoStr) return '';
+  try {
+    const d = new Date(isoStr);
+    return d.getFullYear() + '-' +
+      String(d.getMonth()+1).padStart(2,'0') + '-' +
+      String(d.getDate()).padStart(2,'0') + ' ' +
+      String(d.getHours()).padStart(2,'0') + ':' +
+      String(d.getMinutes()).padStart(2,'0');
+  } catch(e) { return isoStr; }
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  return String(str).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+async function openVersionHistory(itemId) {
+  currentHistoryItemId = itemId;
+  const item = items.find(x => x.id === itemId || x.code === itemId);
+  if (!item) return;
+  document.querySelector('#versionHistoryTitle').textContent =
+    '版本历史 - ' + (item.code || item.id) + ' · ' + (item.smokeSource || '');
+  document.querySelector('#versionHistoryModal').style.display = 'flex';
+  document.querySelector('#versionHistoryList').innerHTML =
+    '<div class="empty">正在加载版本历史...</div>';
+  try {
+    const history = await api('/api/items/' + encodeURIComponent(itemId) + '/versions');
+    renderVersionHistoryList(history);
+  } catch(e) {
+    document.querySelector('#versionHistoryList').innerHTML =
+      '<div class="empty warn">加载失败：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderVersionHistoryList(history) {
+  const listEl = document.querySelector('#versionHistoryList');
+  if (!history.versions || history.versions.length === 0) {
+    listEl.innerHTML = '<div class="empty">暂无版本记录</div>';
+    return;
+  }
+  const html = ['<div class="version-timeline">'];
+  for (const v of history.versions) {
+    const action = actionLabel(v.action);
+    const isCurrent = v.version === history.currentVersion;
+    const cls = ['version-item'];
+    if (isCurrent) cls.push('current');
+    if (v.action === 'restore') cls.push('restore');
+    html.push('<div class="' + cls.join(' ') + '" data-version="' + v.version + '">');
+    html.push('<div class="version-header">');
+    html.push('<div><span class="version-tag">v' + v.version + '</span>');
+    html.push('<span class="version-action ' + action.cls + '">' + action.text + '</span>');
+    if (isCurrent) html.push(' <span class="current-badge">当前版本</span>');
+    html.push('</div>');
+    if (v.parentVersion) {
+      html.push('<span class="meta">基于 v' + v.parentVersion + '</span>');
+    }
+    html.push('</div>');
+    html.push('<div class="version-meta">');
+    html.push('<span>🕒 ' + formatDate(v.createdAt) + '</span>');
+    html.push('<span>👤 ' + escapeHtml(v.createdBy || '未指定') + '</span>');
+    html.push('</div>');
+    html.push('<div class="version-reason">📝 ' + escapeHtml(v.reason || '无原因说明') + '</div>');
+    const s = v.snapshotSummary || {};
+    html.push('<div class="version-summary">');
+    html.push('<span class="vs-pill">状态: ' + escapeHtml(s.status || '-') + '</span>');
+    html.push('<span class="vs-pill">试磨记录: ' + (s.testCount || 0) + ' 条</span>');
+    html.push('<span class="vs-pill">操作日志: ' + (s.logCount || 0) + ' 条</span>');
+    if (s.latestScore !== null && s.latestScore !== undefined) {
+      html.push('<span class="vs-pill">最新评分: ' + s.latestScore + '</span>');
+    }
+    if (s.storage) html.push('<span class="vs-pill">存放: ' + escapeHtml(s.storage) + '</span>');
+    html.push('</div>');
+    if (v.changes && Object.keys(v.changes).length > 0 && v.action !== 'restore') {
+      html.push(renderChangesPreview(v.changes));
+    }
+    html.push('<div class="version-card-actions">');
+    html.push('<button class="secondary" data-view-version="' + v.version + '">查看详情</button>');
+    if (!isCurrent) {
+      html.push('<button class="secondary gold" data-restore-version="' + v.version + '">恢复此版本</button>');
+    }
+    html.push('</div>');
+    html.push('</div>');
+  }
+  html.push('</div>');
+  listEl.innerHTML = html.join('');
+  listEl.querySelectorAll('[data-view-version]').forEach(btn => btn.onclick = (e) => {
+    e.stopPropagation();
+    openVersionDetail(history.itemId || history.itemCode, Number(btn.dataset.viewVersion));
+  });
+  listEl.querySelectorAll('[data-restore-version]').forEach(btn => btn.onclick = (e) => {
+    e.stopPropagation();
+    doRestoreVersion(history.itemId || history.itemCode, Number(btn.dataset.restoreVersion));
+  });
+}
+
+function renderChangesPreview(changes) {
+  const html = ['<div class="changes-summary">'];
+  const fieldLabels = {
+    status: '状态', storage: '存放位置', smokeSource: '烟料',
+    glueRatio: '胶比例', ageYears: '存放年限', batchId: '批次'
+  };
+  for (const [key, val] of Object.entries(changes)) {
+    if (fieldLabels[key] && val.before !== undefined && val.after !== undefined) {
+      html.push('<div class="change-line">');
+      html.push('<span class="change-field">' + fieldLabels[key] + '</span>');
+      html.push('<span class="change-before">' + escapeHtml(JSON.stringify(val.before).replace(/^"|"$/g,'')) + '</span>');
+      html.push('<span class="change-arrow"> → </span>');
+      html.push('<span class="change-after">' + escapeHtml(JSON.stringify(val.after).replace(/^"|"$/g,'')) + '</span>');
+      html.push('</div>');
+    } else if (key === 'testsAdded' && Array.isArray(val)) {
+      html.push('<div class="change-line"><span class="change-field">试磨</span>');
+      html.push('<span class="change-after">+新增 ' + val.length + ' 条试磨记录</span></div>');
+    } else if (key === 'logsAdded' && Array.isArray(val)) {
+      html.push('<div class="change-line"><span class="change-field">日志</span>');
+      html.push('<span class="change-after">+新增 ' + val.length + ' 条操作日志</span></div>');
+    }
+  }
+  html.push('</div>');
+  return html.join('');
+}
+
+async function openVersionDetail(itemId, versionNum) {
+  currentDetailVersionData = { itemId, versionNum };
+  const item = items.find(x => x.id === itemId || x.code === itemId);
+  if (!item) return;
+  document.querySelector('#versionDetailTitle').textContent =
+    '版本详情 - v' + versionNum + ' · ' + (item.code || item.id);
+  document.querySelector('#versionDetailModal').style.display = 'flex';
+  document.querySelector('#versionDetailContent').innerHTML =
+    '<div class="empty">正在加载版本详情...</div>';
+  document.querySelector('#restoreVersionBtn').style.display = 'none';
+  try {
+    const detail = await api('/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum);
+    renderVersionDetail(detail);
+    const isCurrent = detail.version.version === detail.version;
+    const historyCurrent = (item.currentVersion);
+    document.querySelector('#restoreVersionBtn').style.display =
+      detail.version.version !== historyCurrent ? '' : 'none';
+  } catch(e) {
+    document.querySelector('#versionDetailContent').innerHTML =
+      '<div class="empty warn">加载失败：' + escapeHtml(e.message) + '</div>';
+  }
+}
+
+function renderVersionDetail(detail) {
+  const v = detail.version;
+  const snap = v.snapshot;
+  const content = document.querySelector('#versionDetailContent');
+  const action = actionLabel(v.action);
+  const isCurrent = detail.version;
+  let html = [];
+  html.push('<div class="version-info-header">');
+  html.push('<div class="row1">');
+  html.push('<div><span class="v-num">v' + v.version + '</span>');
+  html.push('<span class="version-action ' + action.cls + '">' + action.text + '</span></div>');
+  html.push('<div class="v-meta">');
+  html.push('<span>🕒 ' + formatDate(v.createdAt) + '</span>');
+  html.push('<span>👤 ' + escapeHtml(v.createdBy || '未指定') + '</span>');
+  if (v.parentVersion) html.push('<span>🔗 基于 v' + v.parentVersion + '</span>');
+  html.push('</div></div>');
+  html.push('<div class="v-reason">📝 ' + escapeHtml(v.reason || '无原因说明') + '</div>');
+  html.push('</div>');
+  html.push('<div class="detail-grid">');
+  html.push('<div class="detail-section"><h3>📋 基础信息</h3>');
+  const basics = [
+    ['状态', snap.status],
+    ['存放位置', snap.storage],
+    ['烟料来源', snap.smokeSource],
+    ['胶料比例', snap.glueRatio],
+    ['存放年限', snap.ageYears],
+    ['批次ID', snap.batchId]
+  ];
+  for (const [label, val] of basics) {
+    html.push('<div class="detail-row"><span class="detail-label">' + label + '</span>');
+    html.push('<span class="detail-value">' + escapeHtml(val ?? '-') + '</span></div>');
+  }
+  html.push('</div>');
+  html.push('<div class="detail-section"><h3>📊 试磨记录 (' + (snap.tests || []).length + ' 条)</h3>');
+  const tests = snap.tests || [];
+  if (tests.length === 0) {
+    html.push('<div class="meta">暂无试磨记录</div>');
+  } else {
+    for (let i = tests.length - 1; i >= Math.max(0, tests.length - 3); i--) {
+      const t = tests[i];
+      html.push('<div class="detail-row"><span class="detail-label">#' + (i+1) + ' 评分</span>');
+      html.push('<span class="detail-value"><strong>' + (t.score ?? '-') + '</strong></span></div>');
+      html.push('<div class="detail-row"><span class="detail-label">时间</span>');
+      html.push('<span class="detail-value">' + formatDate(t.at) + '</span></div>');
+      const extras = [t.paper, t.water, t.speed, t.colorLayer, t.sediment].filter(Boolean);
+      if (extras.length) {
+        html.push('<div class="detail-row"><span class="detail-label">参数</span>');
+        html.push('<span class="detail-value">' + escapeHtml(extras.join(' / ')) + '</span></div>');
+      }
+    }
+    if (tests.length > 3) {
+      html.push('<div class="meta" style="margin-top:6px">... 还有 ' + (tests.length-3) + ' 条历史记录</div>');
+    }
+  }
+  html.push('</div></div>');
+  html.push('<div class="detail-section" style="margin-bottom:14px"><h3>📝 操作日志 (' + (snap.logs || []).length + ' 条)</h3>');
+  const logs = (snap.logs || []).slice().reverse().slice(0, 10);
+  if (logs.length === 0) {
+    html.push('<div class="meta">暂无操作日志</div>');
+  } else {
+    for (const l of logs) {
+      html.push('<div class="detail-row"><span class="detail-label">' + formatDate(l.at) + ' · ' + escapeHtml(l.step || '') + '</span>');
+      html.push('<span class="detail-value">' + escapeHtml(l.note || '') + '</span></div>');
+    }
+  }
+  html.push('</div>');
+  if (v.changes && Object.keys(v.changes).length > 0 && v.action !== 'restore') {
+    html.push('<div class="diff-view"><h3 style="margin:0 0 10px;font-size:14px;color:var(--accent)">🔍 变更对比（与上一版本）</h3>');
+    html.push(renderDiffView(v.changes, detail.previousSnapshot, snap));
+    html.push('</div>');
+  }
+  content.innerHTML = html.join('');
+}
+
+function renderDiffView(changes, prevSnap, currSnap) {
+  const html = [];
+  const fieldLabels = {
+    status: '状态', storage: '存放位置', smokeSource: '烟料来源',
+    glueRatio: '胶料比例', ageYears: '存放年限', batchId: '批次'
+  };
+  const fieldKeys = ['status', 'storage', 'smokeSource', 'glueRatio', 'ageYears', 'batchId'];
+  let hasFieldDiff = false;
+  for (const k of fieldKeys) {
+    if (changes[k] && changes[k].before !== undefined) {
+      if (!hasFieldDiff) {
+        html.push('<div class="diff-row" style="font-weight:700;background:#f8faf6;border-radius:6px 6px 0 0">');
+        html.push('<div class="diff-field">字段</div><div>变更前</div><div>变更后</div></div>');
+        hasFieldDiff = true;
+      }
+      const before = JSON.stringify(changes[k].before).replace(/^"|"$/g,'');
+      const after = JSON.stringify(changes[k].after).replace(/^"|"$/g,'');
+      html.push('<div class="diff-row"><div class="diff-field">' + fieldLabels[k] + '</div>');
+      html.push('<div class="diff-old">' + escapeHtml(before || '(空)') + '</div>');
+      html.push('<div class="diff-new">' + escapeHtml(after || '(空)') + '</div></div>');
+    }
+  }
+  if (changes.testsAdded && changes.testsAdded.length) {
+    html.push('<div style="padding:10px 6px 4px"><strong style="color:var(--accent)">+ 新增试磨记录 (' + changes.testsAdded.length + ' 条)：</strong></div>');
+    for (const t of changes.testsAdded) {
+      html.push('<div class="diff-added-list" style="margin:4px 6px">• ' +
+        formatDate(t.at) + ' 评分<strong>' + (t.score ?? '-') + '</strong>' +
+        (t.paper ? ' · ' + t.paper : '') +
+        (t.water ? ' · ' + t.water : '') +
+        (t.speed ? ' · 速度:' + t.speed : '') +
+        '</div>');
+    }
+  }
+  if (changes.logsAdded && changes.logsAdded.length) {
+    html.push('<div style="padding:10px 6px 4px"><strong style="color:var(--accent)">+ 新增操作日志 (' + changes.logsAdded.length + ' 条)：</strong></div>');
+    for (const l of changes.logsAdded) {
+      html.push('<div class="diff-added-list" style="margin:4px 6px">• ' +
+        formatDate(l.at) + ' <strong>[' + (l.step || '') + ']</strong> ' +
+        (l.note || '') +
+        (typeof l.score === 'number' ? ' (评分:' + l.score + ')' : '') +
+        '</div>');
+    }
+  }
+  if (!html.length) html.push('<div class="meta">无字段级变更</div>');
+  return html.join('');
+}
+
+async function doRestoreVersion(itemId, versionNum) {
+  const item = items.find(x => x.id === itemId || x.code === itemId);
+  if (!item) return;
+  if (!confirm('确定要将 ' + (item.code || item.id) + ' 恢复到版本 v' + versionNum + ' 吗？\n\n此操作会创建一个新版本，不会删除历史记录。')) {
+    return;
+  }
+  const createdBy = prompt('请输入恢复操作人姓名：', '未指定用户') || '未指定用户';
+  const reason = prompt('请输入恢复原因：', '恢复至 v' + versionNum) || ('恢复至 v' + versionNum);
+  try {
+    const result = await api('/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum + '/restore', {
+      method: 'POST',
+      body: JSON.stringify({ createdBy, reason })
+    });
+    alert('✓ 恢复成功！已创建新版本 v' + result.restoredVersion.version);
+    document.querySelector('#versionHistoryModal').style.display = 'none';
+    document.querySelector('#versionDetailModal').style.display = 'none';
+    await load();
+  } catch(e) {
+    alert('恢复失败：' + e.message);
+  }
+}
+
+function openRevisionModal(itemId) {
+  currentHistoryItemId = itemId;
+  const item = items.find(x => x.id === itemId || x.code === itemId);
+  if (!item) return;
+  document.querySelector('#revisionModalTitle').textContent =
+    '修订记录 - ' + (item.code || item.id) + ' · ' + (item.smokeSource || '');
+  const form = document.querySelector('#revisionForm');
+  form.reset();
+  const statusSel = document.querySelector('#revisionStatus');
+  statusSel.innerHTML = '<option value="">不修改</option>' + stages.map(s =>
+    '<option value="' + s + '" ' + (s === item.status ? 'selected' : '') + '>' + s + '</option>'
+  ).join('');
+  document.querySelector('#revisionStorage').value = item.storage || '';
+  document.querySelector('#revisionSmokeSource').value = item.smokeSource || '';
+  document.querySelector('#revisionGlueRatio').value = item.glueRatio || '';
+  document.querySelector('#revisionAgeYears').value = item.ageYears ?? '';
+  document.querySelector('#revisionModal').style.display = 'flex';
+}
+
+function closeAllModals() {
+  document.querySelector('#versionHistoryModal').style.display = 'none';
+  document.querySelector('#revisionModal').style.display = 'none';
+  document.querySelector('#versionDetailModal').style.display = 'none';
+  currentDetailVersionData = null;
+  currentHistoryItemId = null;
+}
+
+function bindVersionModalEvents() {
+  document.querySelector('#closeVersionHistory').onclick = () =>
+    document.querySelector('#versionHistoryModal').style.display = 'none';
+  document.querySelector('#closeRevisionModal').onclick = () =>
+    document.querySelector('#revisionModal').style.display = 'none';
+  document.querySelector('#closeVersionDetail').onclick = () =>
+    document.querySelector('#versionDetailModal').style.display = 'none';
+  document.querySelector('#cancelRevisionBtn').onclick = () =>
+    document.querySelector('#revisionModal').style.display = 'none';
+  document.querySelector('#cancelVersionDetailBtn').onclick = () =>
+    document.querySelector('#versionDetailModal').style.display = 'none';
+  document.querySelectorAll('.modal-overlay').forEach(overlay => {
+    overlay.onclick = (e) => {
+      if (e.target === overlay) overlay.style.display = 'none';
+    };
+  });
+  document.querySelector('#restoreVersionBtn').onclick = () => {
+    if (currentDetailVersionData) {
+      doRestoreVersion(currentDetailVersionData.itemId, currentDetailVersionData.versionNum);
+    }
+  };
+  document.querySelector('#revisionForm').onsubmit = async (event) => {
+    event.preventDefault();
+    if (!currentHistoryItemId) return;
+    const form = event.target;
+    const fd = new FormData(form);
+    const createdBy = fd.get('createdBy');
+    const reason = fd.get('reason');
+    if (!createdBy || !createdBy.toString().trim()) {
+      alert('请输入修订人姓名');
+      return;
+    }
+    if (!reason || !reason.toString().trim()) {
+      alert('请输入修订原因');
+      return;
+    }
+    const updates = {};
+    let hasUpdates = false;
+    if (fd.get('status') && fd.get('status').toString().trim()) {
+      updates.status = fd.get('status').toString();
+      hasUpdates = true;
+    }
+    const optionalStrFields = [
+      ['storage', 'revisionStorage'],
+      ['smokeSource', 'revisionSmokeSource'],
+      ['glueRatio', 'revisionGlueRatio']
+    ];
+    const item = items.find(x => x.id === currentHistoryItemId || x.code === currentHistoryItemId);
+    for (const [field, inputId] of optionalStrFields) {
+      const el = document.getElementById(inputId);
+      if (el && el.value.trim() !== '' && item && el.value !== (item[field] || '')) {
+        updates[field] = el.value.trim();
+        hasUpdates = true;
+      }
+    }
+    const ageEl = document.getElementById('revisionAgeYears');
+    if (ageEl && ageEl.value !== '' && item) {
+      const ageVal = Number(ageEl.value);
+      if (ageVal !== (item.ageYears ?? null)) {
+        updates.ageYears = isNaN(ageVal) ? null : ageVal;
+        hasUpdates = true;
+      }
+    }
+    let appendLog = null;
+    if (fd.get('logStep') && fd.get('logStep').toString().trim()) {
+      appendLog = {
+        step: fd.get('logStep').toString(),
+        note: (fd.get('logNote') || '').toString()
+      };
+    }
+    let appendTest = null;
+    const testFields = ['paper','water','speed','colorLayer','sediment','score'];
+    let hasTestData = false;
+    const testObj = {};
+    for (const tf of testFields) {
+      const idName = 'revision' + tf.charAt(0).toUpperCase() + tf.slice(1);
+      const el = document.getElementById(idName);
+      if (el && el.value.trim() !== '') {
+        testObj[tf] = tf === 'score' ? Number(el.value) : el.value.trim();
+        hasTestData = true;
+      }
+    }
+    if (hasTestData) appendTest = testObj;
+    if (!hasUpdates && !appendLog && !appendTest) {
+      alert('未检测到任何变更内容，请至少修改一个字段、追加日志或试磨记录。');
+      return;
+    }
+    const payload = {
+      createdBy: createdBy.toString().trim(),
+      reason: reason.toString().trim()
+    };
+    if (hasUpdates) payload.updates = updates;
+    if (appendLog) payload.appendLog = appendLog;
+    if (appendTest) payload.appendTest = appendTest;
+    try {
+      document.querySelector('#submitRevisionBtn').disabled = true;
+      document.querySelector('#submitRevisionBtn').textContent = '提交中...';
+      const result = await api('/api/items/' + encodeURIComponent(currentHistoryItemId) + '/versions', {
+        method: 'POST',
+        body: JSON.stringify(payload)
+      });
+      alert('✓ 修订成功！已创建新版本 v' + result.version.version);
+      document.querySelector('#revisionModal').style.display = 'none';
+      await load();
+    } catch(e) {
+      alert('修订失败：' + e.message);
+    } finally {
+      document.querySelector('#submitRevisionBtn').disabled = false;
+      document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
+    }
+  };
+}
+
 renderForms();
+bindVersionModalEvents();
 load();

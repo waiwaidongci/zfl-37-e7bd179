@@ -1,4 +1,4 @@
-import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions } from "./db.js";
 
 export async function body(req) {
   const chunks = [];
@@ -25,6 +25,12 @@ export async function createItem(req, res) {
     ...input,
     logs: [{ at: new Date().toISOString(), step: "建档", note: "创建墨锭" + (input.batchId ? "，归入批次" : "") }]
   };
+  migrateItemToVersions(item);
+  const initialVersion = item.versions[0];
+  initialVersion.createdBy = input.createdBy || "未指定用户";
+  initialVersion.reason = "墨锭建档";
+  initialVersion.createdAt = item.logs[0].at;
+  initialVersion.snapshot = buildItemSnapshot(item);
   db.items.unshift(item);
   await saveDb(db);
   return send(res, 201, item);
@@ -45,6 +51,11 @@ export async function patchItem(req, res, id) {
   if (input.storage !== undefined && input.storage !== oldStorage) {
     item.logs.push({ at: new Date().toISOString(), step: "存放位置", note: "从 " + (oldStorage || "未指定") + " 移至 " + (item.storage || "未指定") });
   }
+  createVersion(item, {
+    createdBy: input.createdBy || "未指定用户",
+    reason: input.reason || "更新墨锭信息",
+    action: "revise"
+  });
   await saveDb(db);
   return send(res, 200, item);
 }
@@ -68,7 +79,13 @@ export async function addLog(req, res, id) {
   if (!item) return send(res, 404, { error: "item_not_found" });
   const input = await body(req);
   item.logs ||= [];
-  item.logs.push({ at: new Date().toISOString(), step: input.step || "记录", note: input.note || "" });
+  const newLog = { at: new Date().toISOString(), step: input.step || "记录", note: input.note || "" };
+  item.logs.push(newLog);
+  createVersion(item, {
+    createdBy: input.createdBy || "未指定用户",
+    reason: input.reason || ("追加备注：" + (input.step || "记录")),
+    action: "revise"
+  });
   await saveDb(db);
   return send(res, 201, item);
 }
@@ -98,6 +115,12 @@ export async function addAction(req, res, id) {
   if (pendingTask) {
     pendingTask.testRecordId = testRecord.at;
   }
+
+  createVersion(item, {
+    createdBy: input.createdBy || "未指定用户",
+    reason: input.reason || ("创建试磨记录，评分" + score),
+    action: "revise"
+  });
 
   await saveDb(db);
   return send(res, 201, item);
@@ -346,9 +369,19 @@ export async function completeTask(req, res, id) {
     if (input.grindingTime) noteParts.push("研磨" + input.grindingTime);
     noteParts.push("评分" + score);
     item.logs.push({ at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score });
+    createVersion(item, {
+      createdBy: input.createdBy || "未指定用户",
+      reason: input.reason || ("任务完成并录入试磨记录，评分" + score),
+      action: "revise"
+    });
   } else {
     item.logs ||= [];
     item.logs.push({ at: new Date().toISOString(), step: "任务完成", note: "试磨任务已完成，待录入试磨数据" });
+    createVersion(item, {
+      createdBy: input.createdBy || "未指定用户",
+      reason: input.reason || "完成试磨任务，待录入试磨数据",
+      action: "revise"
+    });
   }
 
   await saveDb(db);
@@ -426,4 +459,168 @@ export async function getComparisonReport(req, res) {
   const db = await loadDb();
   const report = buildComparisonReport(db.items, ids);
   return send(res, 200, report);
+}
+
+export async function getItemVersions(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+  const versions = (item.versions || []).slice().reverse().map(v => ({
+    version: v.version,
+    createdAt: v.createdAt,
+    createdBy: v.createdBy,
+    reason: v.reason,
+    action: v.action,
+    parentVersion: v.parentVersion,
+    changes: v.changes,
+    snapshotSummary: {
+      status: v.snapshot.status,
+      storage: v.snapshot.storage,
+      testCount: (v.snapshot.tests || []).length,
+      logCount: (v.snapshot.logs || []).length,
+      latestScore: (v.snapshot.tests && v.snapshot.tests.length > 0)
+        ? v.snapshot.tests[v.snapshot.tests.length - 1].score
+        : null
+    }
+  }));
+  return send(res, 200, {
+    itemId: item.id,
+    itemCode: item.code,
+    currentVersion: item.currentVersion,
+    versions
+  });
+}
+
+export async function getVersionDetail(req, res, id, versionNum) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+  const vNum = Number(versionNum);
+  const version = (item.versions || []).find(v => v.version === vNum);
+  if (!version) return send(res, 404, { error: "version_not_found" });
+  const prevVersion = (item.versions || []).find(v => v.version === vNum - 1);
+  return send(res, 200, {
+    itemId: item.id,
+    itemCode: item.code,
+    version,
+    previousSnapshot: prevVersion ? prevVersion.snapshot : null
+  });
+}
+
+export async function createRevision(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+  const input = await body(req);
+  if (input.updates) {
+    Object.assign(item, input.updates);
+  }
+  if (input.appendLog) {
+    item.logs ||= [];
+    item.logs.push({
+      at: new Date().toISOString(),
+      step: input.appendLog.step || "修订",
+      note: input.appendLog.note || ""
+    });
+  }
+  if (input.appendTest) {
+    item.tests ||= [];
+    const score = Number(input.appendTest.score || 0);
+    const testRecord = {
+      at: new Date().toISOString(),
+      ...input.appendTest,
+      score
+    };
+    item.tests.push(testRecord);
+    if (score > 0) {
+      item.status = score >= 85 ? "已试磨" : "重点观察";
+    }
+  }
+  const version = createVersion(item, {
+    createdBy: input.createdBy || "未指定用户",
+    reason: input.reason || "修订记录",
+    action: "revise"
+  });
+  await saveDb(db);
+  return send(res, 201, { item, version });
+}
+
+export async function restoreItemVersion(req, res, id, versionNum) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+  const vNum = Number(versionNum);
+  const input = await body(req);
+  const restored = restoreToVersion(item, vNum, {
+    createdBy: input.createdBy || "未指定用户",
+    reason: input.reason || `恢复至版本 v${vNum}`
+  });
+  if (!restored) return send(res, 404, { error: "version_not_found" });
+  await saveDb(db);
+  return send(res, 200, { item, restoredVersion: restored });
+}
+
+export async function compareTwoVersions(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const v1 = Number(url.searchParams.get("v1"));
+  const v2 = Number(url.searchParams.get("v2"));
+  if (!v1 || !v2) return send(res, 400, { error: "versions_required" });
+  const version1 = (item.versions || []).find(v => v.version === v1);
+  const version2 = (item.versions || []).find(v => v.version === v2);
+  if (!version1) return send(res, 404, { error: "version1_not_found" });
+  if (!version2) return send(res, 404, { error: "version2_not_found" });
+  const changes = computeVersionDiff(version1.snapshot, version2.snapshot);
+  return send(res, 200, {
+    itemId: item.id,
+    itemCode: item.code,
+    version1: {
+      version: version1.version,
+      createdAt: version1.createdAt,
+      createdBy: version1.createdBy,
+      reason: version1.reason
+    },
+    version2: {
+      version: version2.version,
+      createdAt: version2.createdAt,
+      createdBy: version2.createdBy,
+      reason: version2.reason
+    },
+    changes
+  });
+}
+
+function computeVersionDiff(snap1, snap2) {
+  const diff = {};
+  const fields = ["status", "storage", "smokeSource", "glueRatio", "ageYears", "batchId"];
+  for (const f of fields) {
+    const a = snap1[f];
+    const b = snap2[f];
+    if (JSON.stringify(a) !== JSON.stringify(b)) {
+      diff[f] = { v1: a, v2: b };
+    }
+  }
+  const tests1 = snap1.tests || [];
+  const tests2 = snap2.tests || [];
+  if (tests1.length !== tests2.length) {
+    diff.tests = {
+      v1Count: tests1.length,
+      v2Count: tests2.length,
+      added: tests2.slice(tests1.length),
+      removed: tests1.slice(tests2.length)
+    };
+  }
+  const logs1 = snap1.logs || [];
+  const logs2 = snap2.logs || [];
+  if (logs1.length !== logs2.length) {
+    diff.logs = {
+      v1Count: logs1.length,
+      v2Count: logs2.length,
+      added: logs2.slice(logs1.length),
+      removed: logs1.slice(logs2.length)
+    };
+  }
+  return diff;
 }

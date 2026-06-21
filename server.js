@@ -9,7 +9,7 @@ import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate,
   getStorageKanban, getItemsByStorage,
   getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
-  getComparisonReport
+  getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -102,6 +102,19 @@ const server = http.createServer(async (req, res) => {
 
     const itemDelete = url.pathname.match(/^\/api\/items\/([^/]+)$/);
     if (itemDelete && req.method === "DELETE") return deleteItem(req, res, itemDelete[1]);
+
+    const versions = url.pathname.match(/^\/api\/items\/([^/]+)\/versions$/);
+    if (versions && req.method === "GET") return getItemVersions(req, res, versions[1]);
+    if (versions && req.method === "POST") return createRevision(req, res, versions[1]);
+
+    const versionDetail = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/([^/]+)$/);
+    if (versionDetail && req.method === "GET") return getVersionDetail(req, res, versionDetail[1], versionDetail[2]);
+
+    const versionRestore = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/([^/]+)\/restore$/);
+    if (versionRestore && req.method === "POST") return restoreItemVersion(req, res, versionRestore[1], versionRestore[2]);
+
+    const versionCompare = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/compare$/);
+    if (versionCompare && req.method === "GET") return compareTwoVersions(req, res, versionCompare[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {
