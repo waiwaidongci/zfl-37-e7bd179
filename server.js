@@ -1,4 +1,7 @@
 import http from "node:http";
+import { readFile } from "node:fs/promises";
+import { join, dirname, extname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { page } from "./renderer.js";
 import {
   getItems, createItem, patchItem, addLog, addAction,
@@ -6,6 +9,7 @@ import {
   getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate
 } from "./routes.js";
 
+const __dirname = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3037);
 
 function html(res, text) {
@@ -13,9 +17,34 @@ function html(res, text) {
   res.end(text);
 }
 
+const mimeTypes = {
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".svg": "image/svg+xml"
+};
+
+async function serveStatic(req, res, pathname) {
+  if (!pathname.startsWith("/public/")) return false;
+  try {
+    const filePath = join(__dirname, pathname);
+    const content = await readFile(filePath);
+    const ext = extname(filePath).toLowerCase();
+    const mimeType = mimeTypes[ext] || "application/octet-stream";
+    res.writeHead(200, { "Content-Type": mimeType });
+    res.end(content);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
+    if (req.method === "GET" && await serveStatic(req, res, url.pathname)) return;
     if (req.method === "GET" && url.pathname === "/") return html(res, page());
 
     if (req.method === "GET" && url.pathname === "/api/items") return getItems(req, res);

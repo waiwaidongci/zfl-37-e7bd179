@@ -126,7 +126,12 @@ export async function getTemplates(req, res) {
 export async function createTemplate(req, res) {
   const db = await loadDb();
   const input = await body(req);
-  const existingDefault = (db.templates || []).find(t => t.isDefault);
+  db.templates ||= [];
+  if (input.isDefault) {
+    db.templates.forEach(t => { t.isDefault = false; });
+  } else if (db.templates.length === 0) {
+    input.isDefault = true;
+  }
   const template = {
     id: newTemplateId(),
     name: input.name || "",
@@ -135,9 +140,8 @@ export async function createTemplate(req, res) {
     grindingTime: input.grindingTime || "",
     speed: input.speed || "",
     observationPoints: input.observationPoints || "",
-    isDefault: input.isDefault && !existingDefault ? true : false
+    isDefault: input.isDefault ? true : false
   };
-  db.templates ||= [];
   db.templates.unshift(template);
   await saveDb(db);
   return send(res, 201, template);
