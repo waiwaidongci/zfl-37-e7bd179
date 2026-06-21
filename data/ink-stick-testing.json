@@ -1,7 +1,25 @@
 {
+  "batches": [
+    {
+      "id": "BAT-20260611-01",
+      "code": "B001",
+      "smokeSource": "黄山松烟",
+      "receiveDate": "2026-06-01",
+      "note": "春季入料，干燥度良好"
+    },
+    {
+      "id": "BAT-20260611-02",
+      "code": "B002",
+      "smokeSource": "桐油烟",
+      "receiveDate": "2026-06-10",
+      "note": "新批次试样"
+    }
+  ],
   "items": [
     {
+      "id": "IS-001",
       "code": "IS-001",
+      "batchId": "BAT-20260611-01",
       "smokeSource": "黄山松烟",
       "glueRatio": "7.5%",
       "ageYears": 8,
@@ -17,7 +35,9 @@
       ]
     },
     {
+      "id": "IS-002",
       "code": "IS-002",
+      "batchId": "BAT-20260611-02",
       "smokeSource": "桐油烟",
       "glueRatio": "8%",
       "ageYears": 3,
