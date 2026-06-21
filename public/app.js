@@ -1080,6 +1080,15 @@ function bindVersionModalEvents() {
   };
 }
 
+const importBtn = document.querySelector('#importBtn');
+if (importBtn) {
+  importBtn.onclick = () => window.location.href = '/import';
+}
+const importBtn2 = document.querySelector('#importBtn2');
+if (importBtn2) {
+  importBtn2.onclick = () => window.location.href = '/import';
+}
+
 renderForms();
 bindVersionModalEvents();
 load();

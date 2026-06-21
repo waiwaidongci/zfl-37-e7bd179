@@ -2,14 +2,15 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { page, comparePage } from "./renderer.js";
+import { page, comparePage, importPage } from "./renderer.js";
 import {
   getItems, createItem, patchItem, addLog, addAction, deleteItem,
   getBatches, createBatch, getBatch, getStats, send,
   getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate,
   getStorageKanban, getItemsByStorage,
   getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
-  getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions
+  getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions,
+  previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -50,6 +51,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "GET" && await serveStatic(req, res, url.pathname)) return;
     if (req.method === "GET" && url.pathname === "/") return html(res, page());
     if (req.method === "GET" && url.pathname === "/compare") return html(res, comparePage());
+    if (req.method === "GET" && url.pathname === "/import") return html(res, importPage());
 
     if (req.method === "GET" && url.pathname === "/api/items") return getItems(req, res);
     if (req.method === "GET" && url.pathname === "/api/comparison") return getComparisonReport(req, res);
@@ -115,6 +117,13 @@ const server = http.createServer(async (req, res) => {
 
     const versionDetail = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/([^/]+)$/);
     if (versionDetail && req.method === "GET") return getVersionDetail(req, res, versionDetail[1], versionDetail[2]);
+
+    if (req.method === "POST" && url.pathname === "/api/import/preview") return previewCSVImport(req, res);
+    if (req.method === "POST" && url.pathname === "/api/import/confirm") return confirmCSVImport(req, res);
+    if (req.method === "GET" && url.pathname === "/api/import/batches") return getImportBatches(req, res);
+
+    const importBatchDetail = url.pathname.match(/^\/api\/import\/batches\/([^/]+)$/);
+    if (importBatchDetail && req.method === "GET") return getImportBatch(req, res, importBatchDetail[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {

@@ -1,4 +1,5 @@
-import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions } from "./db.js";
+import { analyzeCSV, buildImportItems } from "./csvImporter.js";
 
 export async function body(req) {
   const chunks = [];
@@ -659,4 +660,131 @@ function computeVersionDiff(snap1, snap2) {
     };
   }
   return diff;
+}
+
+async function readRawBody(req) {
+  const chunks = [];
+  for await (const chunk of req) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+export async function previewCSVImport(req, res) {
+  const db = await loadDb();
+  const contentType = req.headers["content-type"] || "";
+
+  let csvText = "";
+  if (contentType.startsWith("multipart/form-data")) {
+    const raw = await readRawBody(req);
+    const boundary = contentType.split("boundary=")[1];
+    if (boundary) {
+      const parts = raw.split("--" + boundary);
+      for (const part of parts) {
+        if (part.includes('filename=') || part.includes('name="csvText"') || part.includes('name="file"')) {
+          const headerEnd = part.indexOf("\r\n\r\n");
+          if (headerEnd !== -1) {
+            csvText = part.slice(headerEnd + 4).replace(/\r\n--$/, "").trim();
+            break;
+          }
+        }
+      }
+    }
+  } else {
+    const input = await body(req);
+    csvText = input.csvText || "";
+  }
+
+  if (!csvText.trim()) {
+    return send(res, 400, { error: "empty_csv", message: "CSV内容不能为空" });
+  }
+
+  const analysis = analyzeCSV(csvText, db.items, db.batches);
+
+  const sanitizedAnalysis = {
+    totalRows: analysis.totalRows,
+    importableCount: analysis.importableCount,
+    errorCount: analysis.errorCount,
+    headers: analysis.headers,
+    fieldMapping: analysis.fieldMapping,
+    unrecognizedFields: analysis.unrecognizedFields,
+    missingRequiredFields: analysis.missingRequiredFields,
+    duplicateCodes: analysis.duplicateCodes,
+    missingRequired: analysis.missingRequired,
+    ageFormatErrors: analysis.ageFormatErrors,
+    statusErrors: analysis.statusErrors,
+    batchNotFound: analysis.batchNotFound,
+    errors: analysis.errors,
+    importableRows: analysis.importableRows.map(r => ({
+      rowIndex: r.rowIndex,
+      data: r.data
+    }))
+  };
+
+  return send(res, 200, sanitizedAnalysis);
+}
+
+export async function confirmCSVImport(req, res) {
+  const db = await loadDb();
+  const input = await body(req);
+  const { csvText, createdBy = "未指定用户", note = "" } = input;
+
+  if (!csvText || !csvText.trim()) {
+    return send(res, 400, { error: "empty_csv", message: "CSV内容不能为空" });
+  }
+
+  const analysis = analyzeCSV(csvText, db.items, db.batches);
+
+  if (analysis.importableCount === 0) {
+    return send(res, 400, { error: "no_importable_rows", message: "没有可导入的有效数据行" });
+  }
+
+  const items = buildImportItems(analysis, { createdBy });
+
+  const importBatch = {
+    id: newImportBatchId(),
+    code: "IMP" + String((db.importBatches || []).length + 1).padStart(4, "0"),
+    importedAt: new Date().toISOString(),
+    importedBy: createdBy,
+    itemCount: items.length,
+    totalRows: analysis.totalRows,
+    errorCount: analysis.errorCount,
+    note,
+    itemCodes: items.map(i => i.code),
+    errors: analysis.errors
+  };
+
+  for (const item of items) {
+    db.items.unshift(item);
+  }
+
+  db.importBatches ||= [];
+  db.importBatches.unshift(importBatch);
+
+  await saveDb(db);
+
+  return send(res, 201, {
+    importBatch,
+    importedCount: items.length,
+    importedItems: items.map(i => ({ id: i.id, code: i.code, smokeSource: i.smokeSource }))
+  });
+}
+
+export async function getImportBatches(req, res) {
+  const db = await loadDb();
+  const batches = (db.importBatches || []).map(b => ({
+    ...b,
+    items: b.itemCodes ? b.itemCodes.length : 0
+  }));
+  return send(res, 200, batches);
+}
+
+export async function getImportBatch(req, res, id) {
+  const db = await loadDb();
+  const batch = (db.importBatches || []).find(b => b.id === id || b.code === id);
+  if (!batch) return send(res, 404, { error: "import_batch_not_found" });
+
+  const batchItems = db.items.filter(i => batch.itemCodes && batch.itemCodes.includes(i.code));
+  return send(res, 200, {
+    ...batch,
+    items: batchItems.map(summarize)
+  });
 }

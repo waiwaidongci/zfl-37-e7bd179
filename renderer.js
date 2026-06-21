@@ -13,7 +13,10 @@ export function page() {
       <h1>墨锭试磨室</h1>
       <div class="meta">墨锭建档、批次管理、试磨记录和评分统计</div>
     </div>
-    <button id="reload">刷新</button>
+    <div style="display:flex;gap:10px">
+      <button class="secondary gold" id="importBtn">CSV批量导入</button>
+      <button id="reload">刷新</button>
+    </div>
   </header>
   <main>
     <section>
@@ -34,6 +37,15 @@ export function page() {
           <select name="status" id="statusSelect"></select>
           <button>保存墨锭</button>
         </form>
+        <div class="import-entry" style="margin-top:14px;padding:12px;background:#f8faf6;border:1px solid #e2e6dd;border-radius:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+            <div>
+              <h3 style="margin:0 0 4px;font-size:15px">批量导入墨锭档案</h3>
+              <div class="meta">支持CSV文件上传或粘贴内容，预览校验后批量导入</div>
+            </div>
+            <button class="secondary gold" id="importBtn2">前往导入 →</button>
+          </div>
+        </div>
         <form id="actionForm" style="margin-top:14px">
           <h2>创建试磨记录</h2>
           <label>选择墨锭</label>
@@ -308,6 +320,134 @@ export function comparePage() {
     <div id="reportContent" style="display:none"></div>
   </main>
   <script src="/public/compare.js"></script>
+</body>
+</html>`;
+}
+
+export function importPage() {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CSV批量导入 - 墨锭试磨室</title>
+  <link rel="stylesheet" href="/public/styles.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>CSV批量导入墨锭档案</h1>
+      <div class="meta">上传或粘贴CSV内容，预览校验后批量导入墨锭档案</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="secondary" id="backBtn">← 返回墨锭列表</button>
+      <button class="secondary gold" id="viewBatchesBtn">导入批次记录</button>
+    </div>
+  </header>
+  <main style="grid-template-columns:1fr">
+    <section id="importSection">
+      <div class="panel">
+        <h2>1. 上传或粘贴CSV内容</h2>
+        <div class="import-options">
+          <div class="import-option">
+            <label>上传CSV文件</label>
+            <input type="file" id="csvFile" accept=".csv,text/csv" style="padding:8px">
+          </div>
+          <div class="import-divider">或</div>
+          <div class="import-option" style="flex:1">
+            <label>粘贴CSV内容</label>
+            <textarea id="csvText" placeholder="墨锭编号,烟料来源,胶料比例,存放年限,存放位置,批次编号&#10;IS-101,黄山松烟,7.5%,5,恒湿柜A,B001&#10;IS-102,桐油烟,8%,3,试样盒C,B002" style="min-height:160px;font-family:monospace"></textarea>
+          </div>
+        </div>
+        <div style="margin-top:14px">
+          <label>导入人</label>
+          <input id="importedBy" placeholder="请输入导入人姓名（用于审计记录）" style="max-width:300px">
+        </div>
+        <div style="margin-top:14px">
+          <label>备注（可选）</label>
+          <input id="importNote" placeholder="本次导入的说明或备注" style="max-width:500px">
+        </div>
+        <div class="btn-group" style="margin-top:16px">
+          <button id="previewBtn" style="min-width:140px">预览并校验</button>
+          <button class="secondary" id="clearBtn">清空</button>
+        </div>
+        <div class="import-hint meta" style="margin-top:12px">
+          <strong>支持的字段：</strong>墨锭编号（必填）、烟料来源（必填）、胶料比例、存放年限（非负整数）、存放位置、批次编号、状态（待试磨/已试磨/重点观察）<br>
+          <strong>别名支持：</strong>编号、烟料、来源、胶比、年限、年龄、位置、批次 等
+        </div>
+      </div>
+
+      <div id="previewSection" style="display:none;margin-top:18px">
+        <div class="panel">
+          <div class="section-title">
+            <h2>2. 导入预览与校验结果</h2>
+            <div id="previewSummary" class="preview-summary"></div>
+          </div>
+
+          <div id="fieldMappingSection" style="margin-bottom:16px">
+            <h3 style="margin-bottom:10px;font-size:15px">字段识别结果</h3>
+            <div id="fieldMappingList" class="field-mapping"></div>
+            <div id="unrecognizedFields" style="display:none;margin-top:8px">
+              <span class="pill warn">未识别字段</span>
+              <span id="unrecognizedList" class="meta"></span>
+            </div>
+            <div id="missingRequiredFields" style="display:none;margin-top:8px">
+              <span class="pill warn">缺失必填字段</span>
+              <span id="missingRequiredList" class="meta"></span>
+            </div>
+          </div>
+
+          <div id="errorsSection" style="display:none;margin-bottom:16px">
+            <h3 style="margin-bottom:10px;font-size:15px;color:var(--warn)">发现错误（<span id="errorCount">0</span>）</h3>
+            <div id="errorList" class="error-list"></div>
+          </div>
+
+          <div id="importableSection" style="display:none">
+            <h3 style="margin-bottom:10px;font-size:15px">可导入数据预览（<span id="importableCount">0</span> 行）</h3>
+            <div class="table-container">
+              <table id="importableTable">
+                <thead></thead>
+                <tbody></tbody>
+              </table>
+            </div>
+            <div id="moreRowsHint" class="meta" style="margin-top:8px;display:none"></div>
+          </div>
+
+          <div class="btn-group" style="margin-top:16px">
+            <button id="confirmImportBtn" class="gold" style="min-width:160px">确认导入</button>
+            <button class="secondary" id="cancelPreviewBtn">取消</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="resultSection" style="display:none;margin-top:18px">
+        <div class="panel">
+          <div class="section-title">
+            <h2>3. 导入完成</h2>
+            <span class="pill done" id="resultStatus">导入成功</span>
+          </div>
+          <div id="resultMessage" style="margin-bottom:14px"></div>
+          <div id="importedItemsList"></div>
+          <div class="btn-group" style="margin-top:16px">
+            <button id="continueImportBtn">继续导入</button>
+            <button class="secondary" id="backToListBtn">返回墨锭列表</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="batchesSection" style="display:none">
+      <div class="panel">
+        <div class="section-title">
+          <h2>导入批次记录</h2>
+          <button class="secondary" id="backToImportBtn">← 返回导入页面</button>
+        </div>
+        <div id="batchesList"></div>
+        <div id="batchesEmpty" class="empty" style="display:none">暂无导入批次记录</div>
+      </div>
+    </section>
+  </main>
+  <script src="/public/import.js"></script>
 </body>
 </html>`;
 }
