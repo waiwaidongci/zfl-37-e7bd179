@@ -512,7 +512,25 @@ export async function createRevision(req, res, id) {
   const item = db.items.find(x => x.id === id || x.code === id);
   if (!item) return send(res, 404, { error: "item_not_found" });
   const input = await body(req);
+  const beforeSnap = buildItemSnapshot(item);
+  const beforeLogLen = (item.logs || []).length;
+  const beforeTestLen = (item.tests || []).length;
+  let changed = false;
   if (input.updates) {
+    for (const [k, v] of Object.entries(input.updates)) {
+      if (JSON.stringify(item[k]) !== JSON.stringify(v)) {
+        changed = true;
+        break;
+      }
+    }
+    if (!changed && Object.keys(input.updates).length > 0) {
+      for (const [k, v] of Object.entries(input.updates)) {
+        if (v !== undefined && v !== null && v !== "") {
+          changed = true;
+          break;
+        }
+      }
+    }
     Object.assign(item, input.updates);
   }
   if (input.appendLog) {
@@ -522,6 +540,7 @@ export async function createRevision(req, res, id) {
       step: input.appendLog.step || "修订",
       note: input.appendLog.note || ""
     });
+    changed = true;
   }
   if (input.appendTest) {
     item.tests ||= [];
@@ -535,12 +554,29 @@ export async function createRevision(req, res, id) {
     if (score > 0) {
       item.status = score >= 85 ? "已试磨" : "重点观察";
     }
+    changed = true;
   }
   const version = createVersion(item, {
     createdBy: input.createdBy || "未指定用户",
     reason: input.reason || "修订记录",
     action: "revise"
   });
+  if (!version && !changed) {
+    return send(res, 400, { error: "no_changes", message: "未检测到任何变更内容，未创建新版本" });
+  }
+  if (!version) {
+    if (input.appendLog) { item.logs = item.logs.slice(0, beforeLogLen); }
+    if (input.appendTest) { item.tests = item.tests.slice(0, beforeTestLen); }
+    if (input.updates) {
+      item.status = beforeSnap.status;
+      item.storage = beforeSnap.storage;
+      item.smokeSource = beforeSnap.smokeSource;
+      item.glueRatio = beforeSnap.glueRatio;
+      item.ageYears = beforeSnap.ageYears;
+      item.batchId = beforeSnap.batchId;
+    }
+    return send(res, 400, { error: "no_changes", message: "提交的内容与当前版本完全一致，未创建新版本" });
+  }
   await saveDb(db);
   return send(res, 201, { item, version });
 }

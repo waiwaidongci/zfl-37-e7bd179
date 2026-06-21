@@ -191,7 +191,7 @@ export function computeChanges(oldSnapshot, newSnapshot) {
 }
 
 export function createVersion(item, options) {
-  const { createdBy, reason, action = "revise", parentVersion = null } = options || {};
+  const { createdBy, reason, action = "revise", parentVersion = null, force = false } = options || {};
   if (!item.versions) {
     migrateItemToVersions(item);
   }
@@ -199,6 +199,9 @@ export function createVersion(item, options) {
   const oldSnapshot = lastVersion ? lastVersion.snapshot : buildItemSnapshot(item);
   const newSnapshot = buildItemSnapshot(item);
   const changes = action === "restore" ? null : computeChanges(oldSnapshot, newSnapshot);
+  if (!force && action !== "restore" && !changes) {
+    return null;
+  }
   const newVersionNum = (lastVersion ? lastVersion.version : 0) + 1;
   const version = {
     version: newVersionNum,
