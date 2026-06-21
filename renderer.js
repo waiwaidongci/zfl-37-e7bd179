@@ -19,6 +19,7 @@ export function page() {
     <section>
       <div class="tabs">
         <div class="tab active" data-tab="items">墨锭管理</div>
+        <div class="tab" data-tab="tasks">试磨任务排程</div>
         <div class="tab" data-tab="batches">批次管理</div>
         <div class="tab" data-tab="storage">存放位置看板</div>
         <div class="tab" data-tab="templates">试磨方案模板</div>
@@ -71,9 +72,32 @@ export function page() {
           <button>保存模板</button>
         </form>
       </div>
+      <div id="tab-tasks" style="display:none">
+        <form id="taskForm">
+          <h2>创建试磨任务</h2>
+          <label>选择墨锭</label>
+          <select name="itemId" id="taskItemSelect"></select>
+          <label>计划日期</label>
+          <input type="date" name="scheduledDate" id="taskDate" required>
+          <label>负责人</label>
+          <input name="assignee" id="taskAssignee" placeholder="请输入负责人姓名" required>
+          <label>任务备注</label>
+          <textarea name="note" id="taskNote" placeholder="可选，填写试磨要求或注意事项"></textarea>
+          <button>创建任务</button>
+        </form>
+        <div class="panel" style="margin-top:14px">
+          <h2>今日概览</h2>
+          <div class="task-overview" id="taskOverview">
+            <div class="overview-item"><span class="overview-label">今日待办</span><strong id="todayCount">0</strong></div>
+            <div class="overview-item"><span class="overview-label">逾期任务</span><strong id="overdueCount" class="warn">0</strong></div>
+            <div class="overview-item"><span class="overview-label">今日已完成</span><strong id="completedCount" class="done">0</strong></div>
+          </div>
+        </div>
+      </div>
     </section>
     <section>
       <div id="view-items">
+        <div class="home-todo-alert" id="homeTodoAlert" style="display:none"></div>
         <div class="stats" id="stats"></div>
         <div class="toolbar">
           <select id="statusFilter"><option value="">全部状态</option></select>
@@ -139,6 +163,24 @@ export function page() {
             <tbody></tbody>
           </table>
           <div id="templateEmpty" class="empty" style="display:none">暂无模板数据，请在左侧新增模板。</div>
+        </div>
+      </div>
+      <div id="view-tasks" style="display:none">
+        <div class="stats" id="taskStats"></div>
+        <div class="task-alert" id="taskAlert" style="display:none"></div>
+        <div class="panel">
+          <div class="section-title">
+            <h2>试磨任务列表 — 按日期排序，管理待办、改期、完成</h2>
+          </div>
+          <div class="toolbar">
+            <select id="taskStatusFilter"><option value="">全部状态</option></select>
+            <select id="taskAssigneeFilter"><option value="">全部负责人</option></select>
+            <input type="date" id="taskDateFrom" placeholder="开始日期">
+            <input type="date" id="taskDateTo" placeholder="结束日期">
+            <button class="secondary" id="taskFilterReset">重置筛选</button>
+          </div>
+          <div id="taskList" class="task-list"></div>
+          <div id="taskEmpty" class="empty" style="display:none">暂无任务数据，请在左侧创建试磨任务。</div>
         </div>
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban } from "./db.js";
 
 export async function body(req) {
   const chunks = [];
@@ -199,4 +199,207 @@ export async function setDefaultTemplate(req, res, id) {
   db.templates.forEach(t => { t.isDefault = t.id === id; });
   await saveDb(db);
   return send(res, 200, db.templates);
+}
+
+function enrichTask(task, items) {
+  const item = items.find(i => i.id === task.itemId || i.code === task.itemId);
+  return {
+    ...task,
+    itemCode: item ? item.code : task.itemId,
+    itemSmokeSource: item ? item.smokeSource : "",
+    itemStatus: item ? item.status : ""
+  };
+}
+
+function isOverdue(task) {
+  if (task.status === "已完成" || task.status === "已取消") return false;
+  const today = new Date().toISOString().slice(0, 10);
+  return task.scheduledDate < today;
+}
+
+export async function getTasks(req, res) {
+  const db = await loadDb();
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const status = url.searchParams.get("status");
+  const assignee = url.searchParams.get("assignee");
+  const itemId = url.searchParams.get("itemId");
+  const dateFrom = url.searchParams.get("dateFrom");
+  const dateTo = url.searchParams.get("dateTo");
+
+  let tasks = (db.tasks || []).map(t => enrichTask(t, db.items));
+
+  if (status) tasks = tasks.filter(t => t.status === status);
+  if (assignee) tasks = tasks.filter(t => t.assignee === assignee);
+  if (itemId) tasks = tasks.filter(t => t.itemId === itemId);
+  if (dateFrom) tasks = tasks.filter(t => t.scheduledDate >= dateFrom);
+  if (dateTo) tasks = tasks.filter(t => t.scheduledDate <= dateTo);
+
+  tasks.sort((a, b) => {
+    if (a.scheduledDate !== b.scheduledDate) return a.scheduledDate.localeCompare(b.scheduledDate);
+    return (a.createdAt || "").localeCompare(b.createdAt || "");
+  });
+
+  return send(res, 200, tasks);
+}
+
+export async function createTask(req, res) {
+  const db = await loadDb();
+  const input = await body(req);
+
+  if (!input.itemId) return send(res, 400, { error: "item_id_required" });
+
+  const item = db.items.find(x => x.id === input.itemId || x.code === input.itemId);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+
+  const hasUnfinished = (db.tasks || []).some(t =>
+    t.itemId === item.id && t.status !== "已完成" && t.status !== "已取消"
+  );
+  if (hasUnfinished) return send(res, 409, { error: "task_already_exists", message: "该墨锭已有未完成的试磨任务" });
+
+  const task = {
+    id: newTaskId(),
+    itemId: item.id,
+    scheduledDate: input.scheduledDate || new Date().toISOString().slice(0, 10),
+    assignee: input.assignee || "",
+    status: "待办",
+    note: input.note || "",
+    createdAt: new Date().toISOString(),
+    completedAt: null,
+    testRecordId: null
+  };
+
+  db.tasks ||= [];
+  db.tasks.unshift(task);
+  await saveDb(db);
+
+  return send(res, 201, enrichTask(task, db.items));
+}
+
+export async function updateTask(req, res, id) {
+  const db = await loadDb();
+  const task = (db.tasks || []).find(t => t.id === id);
+  if (!task) return send(res, 404, { error: "task_not_found" });
+
+  const input = await body(req);
+  const oldStatus = task.status;
+
+  if (input.scheduledDate !== undefined) task.scheduledDate = input.scheduledDate;
+  if (input.assignee !== undefined) task.assignee = input.assignee;
+  if (input.note !== undefined) task.note = input.note;
+  if (input.status !== undefined) {
+    task.status = input.status;
+    if (input.status === "已完成" && oldStatus !== "已完成") {
+      task.completedAt = new Date().toISOString();
+    } else if (input.status !== "已完成") {
+      task.completedAt = null;
+    }
+  }
+
+  await saveDb(db);
+  return send(res, 200, enrichTask(task, db.items));
+}
+
+export async function completeTask(req, res, id) {
+  const db = await loadDb();
+  const task = (db.tasks || []).find(t => t.id === id);
+  if (!task) return send(res, 404, { error: "task_not_found" });
+  if (task.status === "已完成") return send(res, 400, { error: "task_already_completed" });
+
+  const item = db.items.find(x => x.id === task.itemId);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+
+  const input = await body(req);
+
+  task.status = "已完成";
+  task.completedAt = new Date().toISOString();
+
+  if (input.paper || input.score !== undefined) {
+    const score = Number(input.score || 0);
+    item.tests ||= [];
+    const testRecord = {
+      at: new Date().toISOString(),
+      paper: input.paper || "",
+      water: input.water || "",
+      speed: input.speed || "",
+      colorLayer: input.colorLayer || "",
+      sediment: input.sediment || "",
+      score
+    };
+    item.tests.push(testRecord);
+    task.testRecordId = testRecord.at;
+
+    item.status = score >= 85 ? "已试磨" : "重点观察";
+    item.logs ||= [];
+    const noteParts = [];
+    if (input.paper) noteParts.push(input.paper);
+    if (input.water) noteParts.push(input.water);
+    if (input.grindingTime) noteParts.push("研磨" + input.grindingTime);
+    noteParts.push("评分" + score);
+    item.logs.push({ at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score });
+  } else {
+    item.logs ||= [];
+    item.logs.push({ at: new Date().toISOString(), step: "任务完成", note: "试磨任务已完成，待录入试磨数据" });
+  }
+
+  await saveDb(db);
+  return send(res, 200, enrichTask(task, db.items));
+}
+
+export async function deleteTask(req, res, id) {
+  const db = await loadDb();
+  db.tasks ||= [];
+  const idx = db.tasks.findIndex(t => t.id === id);
+  if (idx === -1) return send(res, 404, { error: "task_not_found" });
+  db.tasks.splice(idx, 1);
+  await saveDb(db);
+  return send(res, 200, { success: true });
+}
+
+export async function getTodayTasks(req, res) {
+  const db = await loadDb();
+  const today = new Date().toISOString().slice(0, 10);
+
+  const allTasks = (db.tasks || []).map(t => enrichTask(t, db.items));
+
+  const todayTasks = allTasks.filter(t => t.scheduledDate === today && t.status !== "已完成" && t.status !== "已取消");
+  const overdueTasks = allTasks.filter(t => isOverdue(t));
+  const completedToday = allTasks.filter(t => t.completedAt && t.completedAt.slice(0, 10) === today);
+
+  return send(res, 200, {
+    today,
+    todayTasks,
+    overdueTasks,
+    completedToday,
+    counts: {
+      today: todayTasks.length,
+      overdue: overdueTasks.length,
+      completed: completedToday.length
+    }
+  });
+}
+
+export async function getItemTasks(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+
+  const tasks = (db.tasks || [])
+    .filter(t => t.itemId === item.id)
+    .sort((a, b) => (b.createdAt || "").localeCompare(a.createdAt || ""));
+
+  return send(res, 200, tasks);
+}
+
+export async function deleteItem(req, res, id) {
+  const db = await loadDb();
+  const item = db.items.find(x => x.id === id || x.code === id);
+  if (!item) return send(res, 404, { error: "item_not_found" });
+
+  db.items = db.items.filter(x => x.id !== item.id);
+
+  db.tasks ||= [];
+  db.tasks = db.tasks.filter(t => t.itemId !== item.id);
+
+  await saveDb(db);
+  return send(res, 200, { success: true });
 }

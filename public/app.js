@@ -3,6 +3,7 @@ const stages = ["待试磨","已试磨","重点观察"];
 const extraFields = [["paper","试磨纸张"],["water","加水量"],["speed","出墨速度"],["colorLayer","墨色层次"],["sediment","沉淀情况"],["score","评分"]];
 const batchFields = [["code","批次编号","text"],["smokeSource","烟料来源","text"],["receiveDate","入库日期","date"],["note","备注说明","textarea"]];
 const templateFields = [["name","方案名称","text"],["paper","试磨纸张","text"],["water","加水量","text"],["grindingTime","研磨时长","text"],["speed","出墨速度","text"],["observationPoints","观察重点","textarea"]];
+const taskStatuses = ["待办","进行中","已完成","已取消"];
 
 const createForm = document.querySelector('#createForm');
 const actionForm = document.querySelector('#actionForm');
@@ -34,11 +35,30 @@ const storageStatusFilter = document.querySelector('#storageStatusFilter');
 const storageSearch = document.querySelector('#storageSearch');
 const backToKanban = document.querySelector('#backToKanban');
 
+const taskForm = document.querySelector('#taskForm');
+const taskItemSelect = document.querySelector('#taskItemSelect');
+const taskList = document.querySelector('#taskList');
+const taskEmpty = document.querySelector('#taskEmpty');
+const taskStatsEl = document.querySelector('#taskStats');
+const taskStatusFilter = document.querySelector('#taskStatusFilter');
+const taskAssigneeFilter = document.querySelector('#taskAssigneeFilter');
+const taskDateFrom = document.querySelector('#taskDateFrom');
+const taskDateTo = document.querySelector('#taskDateTo');
+const taskFilterReset = document.querySelector('#taskFilterReset');
+const taskAlert = document.querySelector('#taskAlert');
+const todayCountEl = document.querySelector('#todayCount');
+const overdueCountEl = document.querySelector('#overdueCount');
+const completedCountEl = document.querySelector('#completedCount');
+const homeTodoAlert = document.querySelector('#homeTodoAlert');
+
 let items = [];
 let batches = [];
 let templates = [];
 let storageKanban = [];
 let currentStorage = null;
+let tasks = [];
+let todayTasksData = null;
+let itemTaskCache = {};
 
 async function api(path, options) {
   const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
@@ -53,10 +73,12 @@ function switchTab(tab) {
   document.querySelector('#tab-batches').style.display = tab === 'batches' ? '' : 'none';
   document.querySelector('#tab-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#tab-templates').style.display = tab === 'templates' ? '' : 'none';
+  document.querySelector('#tab-tasks').style.display = tab === 'tasks' ? '' : 'none';
   document.querySelector('#view-items').style.display = tab === 'items' ? '' : 'none';
   document.querySelector('#view-batches').style.display = tab === 'batches' ? '' : 'none';
   document.querySelector('#view-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#view-templates').style.display = tab === 'templates' ? '' : 'none';
+  document.querySelector('#view-tasks').style.display = tab === 'tasks' ? '' : 'none';
   if (tab === 'storage') {
     showKanbanView();
   }
@@ -76,6 +98,9 @@ function renderForms() {
   statusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
   storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
   statusSelect.innerHTML = stages.map(s => '<option>'+s+'</option>').join('');
+  taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option>'+s+'</option>').join('');
+  const today = new Date().toISOString().slice(0,10);
+  document.querySelector('#taskDate').value = today;
 }
 
 function getBatchById(id) { return batches.find(b => b.id === id); }
@@ -221,6 +246,21 @@ function render() {
   const templateStats = { '模板总数': templates.length, '默认模板': templates.filter(t => t.isDefault).length };
   templateStatsEl.innerHTML = Object.entries(templateStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
 
+  const pendingItems = items.filter(i => i.status === '待试磨' || i.status === '重点观察');
+  taskItemSelect.innerHTML = pendingItems.map(item => '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.smokeSource || '')+'</option>').join('');
+
+  const assignees = getAssignees();
+  const prevAssignee = taskAssigneeFilter.value;
+  taskAssigneeFilter.innerHTML = '<option value="">全部负责人</option>' + assignees.map(a => '<option value="'+a+'">'+a+'</option>').join('');
+  taskAssigneeFilter.value = prevAssignee;
+
+  const taskStats = { '任务总数': tasks.length, '待办': tasks.filter(t => t.status === '待办').length, '进行中': tasks.filter(t => t.status === '进行中').length, '已完成': tasks.filter(t => t.status === '已完成').length };
+  taskStatsEl.innerHTML = Object.entries(taskStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
+
+  renderHomeTodoAlert();
+  renderTaskOverview();
+  renderTasks();
+
   const status = statusFilter.value;
   const q = document.querySelector('#search').value.trim();
   const batchId = batchFilter.value;
@@ -269,20 +309,180 @@ function cardHtml(item, showStorageEdit) {
   const batch = item.batchId ? getBatchById(item.batchId) : null;
   const batchBadge = batch ? '<span class="pill gold">批次 '+batch.code+'</span>' : '';
   const storageBadge = item.storage ? '<span class="pill">'+item.storage+'</span>' : '<span class="pill warn">未指定位置</span>';
-  const tasks = (item.tasks || []).map(t => '<div class="meta">任务 '+t.position+' · '+t.status+' · '+t.tension+'</div>').join('');
+  const itemTasks = tasks.filter(t => t.itemId === item.id || t.itemId === item.code);
+  const activeTask = itemTasks.find(t => t.status === '待办' || t.status === '进行中');
+  let taskHtml = '';
+  if (activeTask) {
+    const isOverdue = activeTask.scheduledDate < new Date().toISOString().slice(0,10);
+    taskHtml = '<div class="item-task '+(isOverdue?'overdue':'')+'"><span class="task-label">'+(isOverdue?'逾期任务':'待办任务')+'</span><span class="task-date">'+activeTask.scheduledDate+'</span><span class="task-assignee">'+(activeTask.assignee||'未指定')+'</span></div>';
+  }
+  const taskCount = itemTasks.length;
+  const taskCountBadge = taskCount > 0 ? '<span class="pill task-count-badge">历史 '+taskCount+' 次</span>' : '';
+  const taskHistory = itemTasks.length > 0
+    ? '<div class="task-history"><div class="task-history-title">任务历史</div>' +
+        itemTasks.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(t =>
+          '<div class="task-history-item">' +
+            '<span class="pill '+taskStatusClass(t.status)+'">'+t.status+'</span>' +
+            '<span class="task-history-date">'+t.scheduledDate+'</span>' +
+            '<span class="task-history-assignee">'+(t.assignee||'未指定')+'</span>' +
+            (t.note ? '<span class="task-history-note">'+t.note+'</span>' : '') +
+          '</div>'
+        ).join('') +
+      '</div>'
+    : '';
   const logs = (item.logs || []).slice(-4).map(l => '<div>'+l.step+'：'+l.note+'</div>').join('');
   const storageEditBtn = showStorageEdit
     ? '<button class="secondary gold" data-storage-edit="'+(item.id || item.code)+'" style="margin-top:4px">修改存放位置</button>'
     : '';
-  return '<article class="card"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+'</div>'+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+tasks+'<label>状态</label><select data-status="'+(item.id || item.code)+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+(item.id || item.code)+'">追加备注</button>'+storageEditBtn+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  return '<article class="card"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+'</div>'+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+(item.id || item.code)+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+(item.id || item.code)+'">追加备注</button>'+storageEditBtn+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+}
+
+function getAssignees() {
+  const set = new Set();
+  for (const t of tasks) { if (t.assignee) set.add(t.assignee); }
+  return Array.from(set).sort();
+}
+
+function taskStatusClass(status) {
+  switch(status) {
+    case '待办': return 'pending';
+    case '进行中': return 'ongoing';
+    case '已完成': return 'done';
+    case '已取消': return 'cancelled';
+    default: return '';
+  }
+}
+
+function taskCardHtml(task) {
+  const today = new Date().toISOString().slice(0,10);
+  const isOverdue = task.scheduledDate < today && task.status !== '已完成' && task.status !== '已取消';
+  const statusCls = taskStatusClass(task.status);
+  const overdueCls = isOverdue ? ' overdue' : '';
+  return '<div class="task-card '+statusCls+overdueCls+'">' +
+    '<div class="task-header">' +
+      '<div class="task-title">' +
+        '<strong>'+(task.itemCode || task.itemId)+'</strong>' +
+        '<span class="pill '+statusCls+'">'+task.status+'</span>' +
+        (isOverdue ? '<span class="pill warn">逾期</span>' : '') +
+      '</div>' +
+      '<div class="task-meta">' +
+        '<span>📅 '+task.scheduledDate+'</span>' +
+        '<span>👤 '+(task.assignee || '未指定')+'</span>' +
+      '</div>' +
+    '</div>' +
+    (task.itemSmokeSource ? '<div class="task-sub">'+task.itemSmokeSource+' · 当前状态：'+(task.itemStatus || '-')+'</div>' : '') +
+    (task.note ? '<div class="task-note">'+task.note+'</div>' : '') +
+    '<div class="task-actions">' +
+      (task.status !== '已完成' && task.status !== '已取消'
+        ? '<button class="secondary" data-task-complete="'+task.id+'">完成任务</button>' +
+          '<button class="secondary gold" data-task-reschedule="'+task.id+'">改期</button>'
+        : '') +
+      (task.status === '待办' ? '<button class="secondary" data-task-start="'+task.id+'">开始</button>' : '') +
+      '<button class="secondary" style="background:var(--warn)" data-task-delete="'+task.id+'">删除</button>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderTasks() {
+  if (tasks.length === 0) {
+    taskList.style.display = 'none';
+    taskEmpty.style.display = '';
+    return;
+  }
+  taskList.style.display = '';
+  taskEmpty.style.display = 'none';
+
+  const status = taskStatusFilter.value;
+  const assignee = taskAssigneeFilter.value;
+  const dateFrom = taskDateFrom.value;
+  const dateTo = taskDateTo.value;
+
+  const visible = tasks.filter(t => {
+    if (status && t.status !== status) return false;
+    if (assignee && t.assignee !== assignee) return false;
+    if (dateFrom && t.scheduledDate < dateFrom) return false;
+    if (dateTo && t.scheduledDate > dateTo) return false;
+    return true;
+  });
+
+  taskList.innerHTML = visible.map(t => taskCardHtml(t)).join('');
+  bindTaskEvents();
+}
+
+function renderTaskOverview() {
+  if (!todayTasksData) return;
+  todayCountEl.textContent = todayTasksData.counts.today;
+  overdueCountEl.textContent = todayTasksData.counts.overdue;
+  completedCountEl.textContent = todayTasksData.counts.completed;
+}
+
+function renderHomeTodoAlert() {
+  if (!todayTasksData || (todayTasksData.counts.today === 0 && todayTasksData.counts.overdue === 0)) {
+    homeTodoAlert.style.display = 'none';
+    return;
+  }
+  homeTodoAlert.style.display = '';
+  let html = '<div class="home-todo-title">📋 今日待办提醒</div>';
+  if (todayTasksData.counts.today > 0) {
+    html += '<div class="home-todo-item">今日待办：<strong>'+todayTasksData.counts.today+'</strong> 个任务</div>';
+  }
+  if (todayTasksData.counts.overdue > 0) {
+    html += '<div class="home-todo-item warn">逾期任务：<strong>'+todayTasksData.counts.overdue+'</strong> 个任务</div>';
+  }
+  html += '<button class="secondary" id="goToTasks">查看全部任务 →</button>';
+  homeTodoAlert.innerHTML = html;
+  const goBtn = document.querySelector('#goToTasks');
+  if (goBtn) goBtn.onclick = () => switchTab('tasks');
+}
+
+function bindTaskEvents() {
+  document.querySelectorAll('[data-task-complete]').forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.taskComplete;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const withTest = confirm('是否同时录入试磨数据？\n点击「确定」直接完成任务，试磨数据稍后补录。\n点击「取消」跳转到试磨记录页面。');
+    if (withTest) {
+      await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify({}) });
+    } else {
+      itemSelect.value = task.itemId;
+      switchTab('items');
+      return;
+    }
+    await load();
+  });
+
+  document.querySelectorAll('[data-task-reschedule]').forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.taskReschedule;
+    const task = tasks.find(t => t.id === id);
+    if (!task) return;
+    const newDate = prompt('输入新的计划日期', task.scheduledDate);
+    if (!newDate) return;
+    await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify({ scheduledDate: newDate }) });
+    await load();
+  });
+
+  document.querySelectorAll('[data-task-start]').forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.taskStart;
+    await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify({ status: '进行中' }) });
+    await load();
+  });
+
+  document.querySelectorAll('[data-task-delete]').forEach(btn => btn.onclick = async () => {
+    const id = btn.dataset.taskDelete;
+    if (!confirm('确定删除此任务？')) return;
+    await api('/api/tasks/'+id, { method:'DELETE' });
+    await load();
+  });
 }
 
 async function load() {
-  [items, batches, templates, storageKanban] = await Promise.all([
+  [items, batches, templates, storageKanban, tasks, todayTasksData] = await Promise.all([
     api('/api/items'),
     api('/api/batches'),
     api('/api/templates'),
-    api('/api/storage')
+    api('/api/storage'),
+    api('/api/tasks'),
+    api('/api/tasks/today')
   ]);
   render();
   const defaultTpl = templates.find(t => t.isDefault);
@@ -323,6 +523,30 @@ templateSelect.onchange = () => {
   } else {
     actionForm.reset();
   }
+};
+taskForm.onsubmit = async event => {
+  event.preventDefault();
+  const data = Object.fromEntries(new FormData(taskForm).entries());
+  try {
+    await api('/api/tasks', { method:'POST', body: JSON.stringify(data) });
+    taskForm.reset();
+    const today = new Date().toISOString().slice(0,10);
+    document.querySelector('#taskDate').value = today;
+    await load();
+  } catch(err) {
+      alert('创建失败：' + err.message);
+    }
+};
+taskStatusFilter.onchange = renderTasks;
+taskAssigneeFilter.onchange = renderTasks;
+taskDateFrom.onchange = renderTasks;
+taskDateTo.onchange = renderTasks;
+taskFilterReset.onclick = () => {
+  taskStatusFilter.value = '';
+  taskAssigneeFilter.value = '';
+  taskDateFrom.value = '';
+  taskDateTo.value = '';
+  renderTasks();
 };
 document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => switchTab(tab.dataset.tab));
 statusFilter.onchange = render;

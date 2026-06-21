@@ -102,8 +102,10 @@ const fields = [["code", "墨锭编号", "text"], ["smokeSource", "烟料来源"
 const extraFields = [["paper", "试磨纸张"], ["water", "加水量"], ["speed", "出墨速度"], ["colorLayer", "墨色层次"], ["sediment", "沉淀情况"], ["score", "评分"]];
 const batchFields = [["code", "批次编号", "text"], ["smokeSource", "烟料来源", "text"], ["receiveDate", "入库日期", "date"], ["note", "备注说明", "textarea"]];
 const templateFields = [["name", "方案名称", "text"], ["paper", "试磨纸张", "text"], ["water", "加水量", "text"], ["grindingTime", "研磨时长", "text"], ["speed", "出墨速度", "text"], ["observationPoints", "观察重点", "textarea"]];
+const taskStatuses = ["待办", "进行中", "已完成", "已取消"];
+const taskFields = [["scheduledDate", "计划日期", "date"], ["assignee", "负责人", "text"], ["note", "任务备注", "textarea"]];
 
-export const config = { stages, statLabels, fields, extraFields, batchFields, templateFields };
+export const config = { stages, statLabels, fields, extraFields, batchFields, templateFields, taskStatuses, taskFields };
 
 export async function loadDb() {
   if (!existsSync(dbPath)) {
@@ -115,8 +117,13 @@ export async function loadDb() {
   if (!db.batches) { db.batches = []; changed = true; }
   if (!db.items) { db.items = []; changed = true; }
   if (!db.templates) { db.templates = []; changed = true; }
+  if (!db.tasks) { db.tasks = []; changed = true; }
   for (const item of db.items) { if (!item.id) { item.id = item.code || ("IS-" + Date.now() + Math.random().toString(36).slice(2,5)); changed = true; } }
   for (const tpl of db.templates) { if (!tpl.id) { tpl.id = newTemplateId(); changed = true; } if (tpl.isDefault === undefined) { tpl.isDefault = false; changed = true; } }
+  for (const task of db.tasks) {
+    if (!task.id) { task.id = newTaskId(); changed = true; }
+    if (!task.status) { task.status = "待办"; changed = true; }
+  }
   if (changed) await saveDb(db);
   return db;
 }
@@ -157,6 +164,10 @@ export function computeBatchProgress(batch, items) {
 
 export function newTemplateId() {
   return "TPL-" + Date.now() + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+export function newTaskId() {
+  return "TSK-" + Date.now() + Math.random().toString(36).slice(2, 6).toUpperCase();
 }
 
 export function getDefaultTemplate(templates) {

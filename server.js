@@ -4,10 +4,11 @@ import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { page } from "./renderer.js";
 import {
-  getItems, createItem, patchItem, addLog, addAction,
+  getItems, createItem, patchItem, addLog, addAction, deleteItem,
   getBatches, createBatch, getBatch, getStats, send,
   getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate,
-  getStorageKanban, getItemsByStorage
+  getStorageKanban, getItemsByStorage,
+  getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -81,6 +82,23 @@ const server = http.createServer(async (req, res) => {
 
     const storageDetail = url.pathname.match(/^\/api\/storage\/(.+)$/);
     if (storageDetail && req.method === "GET") return getItemsByStorage(req, res, storageDetail[1]);
+
+    if (req.method === "GET" && url.pathname === "/api/tasks") return getTasks(req, res);
+    if (req.method === "POST" && url.pathname === "/api/tasks") return createTask(req, res);
+    if (req.method === "GET" && url.pathname === "/api/tasks/today") return getTodayTasks(req, res);
+
+    const taskId = url.pathname.match(/^\/api\/tasks\/([^/]+)$/);
+    if (taskId && req.method === "PATCH") return updateTask(req, res, taskId[1]);
+    if (taskId && req.method === "DELETE") return deleteTask(req, res, taskId[1]);
+
+    const taskComplete = url.pathname.match(/^\/api\/tasks\/([^/]+)\/complete$/);
+    if (taskComplete && req.method === "POST") return completeTask(req, res, taskComplete[1]);
+
+    const itemTasks = url.pathname.match(/^\/api\/items\/([^/]+)\/tasks$/);
+    if (itemTasks && req.method === "GET") return getItemTasks(req, res, itemTasks[1]);
+
+    const itemDelete = url.pathname.match(/^\/api\/items\/([^/]+)$/);
+    if (itemDelete && req.method === "DELETE") return deleteItem(req, res, itemDelete[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {
