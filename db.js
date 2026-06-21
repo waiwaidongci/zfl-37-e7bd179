@@ -198,3 +198,55 @@ export function computeStorageKanban(items) {
     return a.storage.localeCompare(b.storage, "zh-CN");
   });
 }
+
+export function buildComparisonReport(items, ids) {
+  const selected = ids
+    .map(id => items.find(x => x.id === id || x.code === id))
+    .filter(Boolean);
+
+  const reportItems = selected.map(item => {
+    const tests = item.tests || [];
+    const hasTests = tests.length > 0;
+    const scores = tests.map(t => t.score).filter(s => typeof s === "number");
+    const avgScore = scores.length ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
+    const latestTest = tests.length ? tests[tests.length - 1] : null;
+    const speeds = tests.map(t => t.speed).filter(Boolean);
+    const colorLayers = tests.map(t => t.colorLayer).filter(Boolean);
+    const sediments = tests.map(t => t.sediment).filter(Boolean);
+
+    return {
+      id: item.id,
+      code: item.code || item.id,
+      smokeSource: item.smokeSource || "",
+      glueRatio: item.glueRatio || "",
+      ageYears: item.ageYears ?? null,
+      status: item.status || "",
+      hasTests,
+      testCount: tests.length,
+      allScores: scores,
+      avgScore,
+      latestScore: latestTest ? latestTest.score : null,
+      latestSpeed: latestTest ? latestTest.speed : null,
+      latestColorLayer: latestTest ? latestTest.colorLayer : null,
+      latestSediment: latestTest ? latestTest.sediment : null,
+      allSpeeds: [...new Set(speeds)],
+      allColorLayers: [...new Set(colorLayers)],
+      allSediments: [...new Set(sediments)],
+      testHistory: tests.slice().sort((a, b) => (b.at || "").localeCompare(a.at || "")).map(t => ({
+        at: t.at,
+        score: t.score,
+        speed: t.speed || "",
+        colorLayer: t.colorLayer || "",
+        sediment: t.sediment || "",
+        paper: t.paper || "",
+        water: t.water || ""
+      }))
+    };
+  });
+
+  return {
+    generatedAt: new Date().toISOString(),
+    itemCount: reportItems.length,
+    items: reportItems
+  };
+}

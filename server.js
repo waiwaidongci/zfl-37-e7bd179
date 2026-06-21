@@ -2,13 +2,14 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { page } from "./renderer.js";
+import { page, comparePage } from "./renderer.js";
 import {
   getItems, createItem, patchItem, addLog, addAction, deleteItem,
   getBatches, createBatch, getBatch, getStats, send,
   getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate,
   getStorageKanban, getItemsByStorage,
-  getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks
+  getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
+  getComparisonReport
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -48,8 +49,10 @@ const server = http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && await serveStatic(req, res, url.pathname)) return;
     if (req.method === "GET" && url.pathname === "/") return html(res, page());
+    if (req.method === "GET" && url.pathname === "/compare") return html(res, comparePage());
 
     if (req.method === "GET" && url.pathname === "/api/items") return getItems(req, res);
+    if (req.method === "GET" && url.pathname === "/api/comparison") return getComparisonReport(req, res);
     if (req.method === "POST" && url.pathname === "/api/items") return createItem(req, res);
     if (req.method === "GET" && url.pathname === "/api/stats") return getStats(req, res);
 

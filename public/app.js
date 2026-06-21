@@ -59,6 +59,7 @@ let currentStorage = null;
 let tasks = [];
 let todayTasksData = null;
 let itemTaskCache = {};
+let selectedCompareIds = new Set();
 
 async function api(path, options) {
   const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
@@ -128,6 +129,16 @@ function applyTemplate(templateId) {
   }
 }
 
+function updateCompareButton() {
+  const compareBtn = document.querySelector('#compareBtn');
+  const clearBtn = document.querySelector('#clearCompareBtn');
+  if (!compareBtn) return;
+  const count = selectedCompareIds.size;
+  compareBtn.textContent = '生成对比报告（' + count + '）';
+  compareBtn.disabled = count < 2 || count > 4;
+  if (clearBtn) clearBtn.style.display = count > 0 ? '' : 'none';
+}
+
 function bindCardEvents() {
   document.querySelectorAll('[data-status]').forEach(sel => sel.onchange = async () => {
     await api('/api/items/'+sel.dataset.status, { method:'PATCH', body: JSON.stringify({ status: sel.value }) });
@@ -158,6 +169,22 @@ function bindCardEvents() {
     if (trimmed === defaultVal) return;
     await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed }) });
     await load();
+  });
+  document.querySelectorAll('[data-compare]').forEach(cb => cb.onchange = () => {
+    const id = cb.dataset.compare;
+    if (cb.checked) {
+      if (selectedCompareIds.size >= 4) {
+        cb.checked = false;
+        alert('最多只能选择4块墨锭进行对比');
+        return;
+      }
+      selectedCompareIds.add(id);
+      cb.closest('.card').classList.add('card-selected');
+    } else {
+      selectedCompareIds.delete(id);
+      cb.closest('.card').classList.remove('card-selected');
+    }
+    updateCompareButton();
   });
 }
 
@@ -302,9 +329,12 @@ function render() {
   if (currentStorage) {
     renderStorageDetail();
   }
+  updateCompareButton();
 }
 
 function cardHtml(item, showStorageEdit) {
+  const itemId = item.id || item.code;
+  const isSelected = selectedCompareIds.has(itemId);
   const main = fields.slice(0,4).map(([key,label]) => '<div><b>'+label+'</b> '+(item[key] ?? '')+'</div>').join('');
   const batch = item.batchId ? getBatchById(item.batchId) : null;
   const batchBadge = batch ? '<span class="pill gold">批次 '+batch.code+'</span>' : '';
@@ -332,9 +362,10 @@ function cardHtml(item, showStorageEdit) {
     : '';
   const logs = (item.logs || []).slice(-4).map(l => '<div>'+l.step+'：'+l.note+'</div>').join('');
   const storageEditBtn = showStorageEdit
-    ? '<button class="secondary gold" data-storage-edit="'+(item.id || item.code)+'" style="margin-top:4px">修改存放位置</button>'
+    ? '<button class="secondary gold" data-storage-edit="'+itemId+'" style="margin-top:4px">修改存放位置</button>'
     : '';
-  return '<article class="card"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+'</div>'+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+(item.id || item.code)+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+(item.id || item.code)+'">追加备注</button>'+storageEditBtn+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  const checkboxHtml = '<label class="card-checkbox"><input type="checkbox" data-compare="'+itemId+'" '+(isSelected?'checked':'')+'><span>加入对比</span></label>';
+  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
 }
 
 function getAssignees() {
@@ -564,6 +595,29 @@ storageStatusFilter.onchange = renderStorageDetail;
 storageSearch.oninput = renderStorageDetail;
 backToKanban.onclick = showKanbanView;
 document.querySelector('#reload').onclick = load;
+
+const compareBtn = document.querySelector('#compareBtn');
+if (compareBtn) {
+  compareBtn.onclick = () => {
+    const ids = Array.from(selectedCompareIds);
+    if (ids.length < 2) {
+      alert('请至少选择2块墨锭进行对比');
+      return;
+    }
+    if (ids.length > 4) {
+      alert('最多只能选择4块墨锭进行对比');
+      return;
+    }
+    window.location.href = '/compare?ids=' + encodeURIComponent(ids.join(','));
+  };
+}
+const clearCompareBtn = document.querySelector('#clearCompareBtn');
+if (clearCompareBtn) {
+  clearCompareBtn.onclick = () => {
+    selectedCompareIds.clear();
+    render();
+  };
+}
 
 renderForms();
 load();

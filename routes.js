@@ -1,4 +1,4 @@
-import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport } from "./db.js";
 
 export async function body(req) {
   const chunks = [];
@@ -412,4 +412,18 @@ export async function deleteItem(req, res, id) {
 
   await saveDb(db);
   return send(res, 200, { success: true });
+}
+
+export async function getComparisonReport(req, res) {
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const idsParam = url.searchParams.get("ids");
+  if (!idsParam) return send(res, 400, { error: "ids_required" });
+
+  const ids = idsParam.split(",").map(s => s.trim()).filter(Boolean);
+  if (ids.length < 2) return send(res, 400, { error: "min_two_items", message: "至少选择2块墨锭进行对比" });
+  if (ids.length > 4) return send(res, 400, { error: "max_four_items", message: "最多选择4块墨锭进行对比" });
+
+  const db = await loadDb();
+  const report = buildComparisonReport(db.items, ids);
+  return send(res, 200, report);
 }

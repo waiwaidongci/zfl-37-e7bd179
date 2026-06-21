@@ -103,9 +103,11 @@ export function page() {
           <select id="statusFilter"><option value="">全部状态</option></select>
           <select id="batchFilter"><option value="">全部批次</option></select>
           <input id="search" placeholder="搜索编号或关键词">
+          <button class="secondary gold" id="compareBtn" disabled>生成对比报告（0）</button>
+          <button class="secondary" id="clearCompareBtn" style="display:none">清除选择</button>
         </div>
         <div class="panel">
-          <h2>选择墨锭后录入试磨记录，系统会保留多次试磨结果并更新评分状态。</h2>
+          <h2>选择墨锭后录入试磨记录，系统会保留多次试磨结果并更新评分状态。勾选2-4块墨锭可生成横向对比报告。</h2>
           <div class="grid" id="cards"></div>
         </div>
       </div>
@@ -186,6 +188,37 @@ export function page() {
     </section>
   </main>
   <script src="/public/app.js"></script>
+</body>
+</html>`;
+}
+
+export function comparePage() {
+  return `<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>试磨对比报告 - 墨锭试磨室</title>
+  <link rel="stylesheet" href="/public/styles.css">
+  <link rel="stylesheet" href="/public/compare.css">
+</head>
+<body class="compare-body">
+  <header class="compare-header">
+    <div>
+      <h1>试磨对比报告</h1>
+      <div class="meta" id="reportMeta">加载中...</div>
+    </div>
+    <div style="display:flex;gap:10px">
+      <button class="secondary" id="backBtn">← 返回墨锭列表</button>
+      <button id="refreshReport">刷新报告</button>
+    </div>
+  </header>
+  <main class="compare-main">
+    <div id="reportLoading" class="compare-loading">正在加载对比数据...</div>
+    <div id="reportError" class="compare-error" style="display:none"></div>
+    <div id="reportContent" style="display:none"></div>
+  </main>
+  <script src="/public/compare.js"></script>
 </body>
 </html>`;
 }
