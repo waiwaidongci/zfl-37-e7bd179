@@ -17,6 +17,24 @@
   ],
   "items": [
     {
+      "id": "IS-001",
+      "code": "IS-001",
+      "batchId": "BAT-20260611-01",
+      "smokeSource": "黄山松烟",
+      "glueRatio": "7.5%",
+      "ageYears": 8,
+      "storage": "恒湿柜B",
+      "status": "已试磨",
+      "logs": [
+        {
+          "at": "2026-06-11",
+          "step": "试磨",
+          "note": "宣纸20滴水，出墨快，评分86",
+          "score": 86
+        }
+      ]
+    },
+    {
       "id": "IS-002",
       "code": "IS-002",
       "batchId": "BAT-20260611-02",
@@ -24,19 +42,13 @@
       "glueRatio": "8%",
       "ageYears": 3,
       "storage": "试样盒C",
-      "status": "已试磨",
+      "status": "重点观察",
       "logs": [
         {
           "at": "2026-06-21T03:50:28.907Z",
           "step": "试磨",
           "note": "棉连纸，评分79",
           "score": 79
-        },
-        {
-          "at": "2026-06-21T06:43:55.557Z",
-          "step": "试磨",
-          "note": "净皮宣纸，20滴，评分88",
-          "score": 88
         }
       ],
       "tests": [
@@ -48,15 +60,6 @@
           "colorLayer": "偏暖",
           "sediment": "少",
           "score": 79
-        },
-        {
-          "at": "2026-06-21T06:43:55.557Z",
-          "paper": "净皮宣纸",
-          "water": "20滴",
-          "speed": "",
-          "colorLayer": "",
-          "sediment": "",
-          "score": 88
         }
       ]
     }
@@ -83,28 +86,5 @@
       "isDefault": false
     }
   ],
-  "tasks": [
-    {
-      "id": "TSK-1782024382346D1GW",
-      "itemId": "IS-002",
-      "scheduledDate": "2026-06-20",
-      "assignee": "李四",
-      "status": "待办",
-      "note": "逾期测试任务",
-      "createdAt": "2026-06-21T06:46:22.346Z",
-      "completedAt": null,
-      "testRecordId": null
-    },
-    {
-      "id": "TSK-1782024212781LD6N",
-      "itemId": "IS-002",
-      "scheduledDate": "2026-06-21",
-      "assignee": "张三",
-      "status": "已完成",
-      "note": "测试任务",
-      "createdAt": "2026-06-21T06:43:32.781Z",
-      "completedAt": "2026-06-21T06:43:55.557Z",
-      "testRecordId": "2026-06-21T06:43:55.557Z"
-    }
-  ]
+  "tasks": []
 }

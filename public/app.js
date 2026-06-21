@@ -440,12 +440,20 @@ function bindTaskEvents() {
     const id = btn.dataset.taskComplete;
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    const withTest = confirm('是否同时录入试磨数据？\n点击「确定」直接完成任务，试磨数据稍后补录。\n点击「取消」跳转到试磨记录页面。');
-    if (withTest) {
-      await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify({}) });
-    } else {
+    const goToTest = confirm('任务完成！\n\n点击「确定」跳转到试磨记录页面录入数据。\n点击「取消」稍后补录试磨数据。');
+    await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify({}) });
+    if (goToTest) {
       itemSelect.value = task.itemId;
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl) {
+        templateSelect.value = defaultTpl.id;
+        applyTemplate(defaultTpl.id);
+      }
       switchTab('items');
+      setTimeout(() => {
+        const actionFormEl = document.querySelector('#actionForm');
+        if (actionFormEl) actionFormEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
       return;
     }
     await load();

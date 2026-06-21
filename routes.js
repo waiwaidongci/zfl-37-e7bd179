@@ -81,7 +81,8 @@ export async function addAction(req, res, id) {
   item.logs ||= [];
   const score = Number(input.score || 0);
   item.tests ||= [];
-  item.tests.push({ at: new Date().toISOString(), ...input, score });
+  const testRecord = { at: new Date().toISOString(), ...input, score };
+  item.tests.push(testRecord);
   item.status = score >= 85 ? "已试磨" : "重点观察";
   const noteParts = [];
   if (input.paper) noteParts.push(input.paper);
@@ -89,6 +90,15 @@ export async function addAction(req, res, id) {
   if (input.grindingTime) noteParts.push("研磨" + input.grindingTime);
   noteParts.push("评分" + score);
   item.logs.push({ at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score });
+
+  db.tasks ||= [];
+  const pendingTask = db.tasks
+    .filter(t => t.itemId === item.id && t.status === "已完成" && !t.testRecordId)
+    .sort((a, b) => (b.completedAt || "").localeCompare(a.completedAt || ""))[0];
+  if (pendingTask) {
+    pendingTask.testRecordId = testRecord.at;
+  }
+
   await saveDb(db);
   return send(res, 201, item);
 }
