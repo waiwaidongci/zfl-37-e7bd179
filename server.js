@@ -2,7 +2,8 @@ import http from "node:http";
 import { page } from "./renderer.js";
 import {
   getItems, createItem, patchItem, addLog, addAction,
-  getBatches, createBatch, getBatch, getStats, send
+  getBatches, createBatch, getBatch, getStats, send,
+  getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate
 } from "./routes.js";
 
 const port = Number(process.env.PORT || 3037);
@@ -35,6 +36,16 @@ const server = http.createServer(async (req, res) => {
 
     const batchDetail = url.pathname.match(/^\/api\/batches\/([^/]+)$/);
     if (batchDetail && req.method === "GET") return getBatch(req, res, batchDetail[1]);
+
+    if (req.method === "GET" && url.pathname === "/api/templates") return getTemplates(req, res);
+    if (req.method === "POST" && url.pathname === "/api/templates") return createTemplate(req, res);
+
+    const templateId = url.pathname.match(/^\/api\/templates\/([^/]+)$/);
+    if (templateId && req.method === "PATCH") return updateTemplate(req, res, templateId[1]);
+    if (templateId && req.method === "DELETE") return deleteTemplate(req, res, templateId[1]);
+
+    const setDefault = url.pathname.match(/^\/api\/templates\/([^/]+)\/default$/);
+    if (setDefault && req.method === "POST") return setDefaultTemplate(req, res, setDefault[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {

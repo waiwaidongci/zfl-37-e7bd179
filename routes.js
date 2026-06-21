@@ -1,4 +1,4 @@
-import { loadDb, saveDb, newBatchId, newItemId, summarize, computeBatchProgress } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, summarize, computeBatchProgress, getDefaultTemplate } from "./db.js";
 
 export async function body(req) {
   const chunks = [];
@@ -62,7 +62,12 @@ export async function addAction(req, res, id) {
   item.tests ||= [];
   item.tests.push({ at: new Date().toISOString(), ...input, score });
   item.status = score >= 85 ? "已试磨" : "重点观察";
-  item.logs.push({ at: new Date().toISOString(), step: "试磨", note: (input.paper || "试纸") + "，评分" + score, score });
+  const noteParts = [];
+  if (input.paper) noteParts.push(input.paper);
+  if (input.water) noteParts.push(input.water);
+  if (input.grindingTime) noteParts.push("研磨" + input.grindingTime);
+  noteParts.push("评分" + score);
+  item.logs.push({ at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score });
   await saveDb(db);
   return send(res, 201, item);
 }
@@ -111,4 +116,62 @@ export async function getStats(req, res) {
     if (stats[item.status] !== undefined) stats[item.status] += 1;
   }
   return send(res, 200, stats);
+}
+
+export async function getTemplates(req, res) {
+  const db = await loadDb();
+  return send(res, 200, db.templates || []);
+}
+
+export async function createTemplate(req, res) {
+  const db = await loadDb();
+  const input = await body(req);
+  const existingDefault = (db.templates || []).find(t => t.isDefault);
+  const template = {
+    id: newTemplateId(),
+    name: input.name || "",
+    paper: input.paper || "",
+    water: input.water || "",
+    grindingTime: input.grindingTime || "",
+    speed: input.speed || "",
+    observationPoints: input.observationPoints || "",
+    isDefault: input.isDefault && !existingDefault ? true : false
+  };
+  db.templates ||= [];
+  db.templates.unshift(template);
+  await saveDb(db);
+  return send(res, 201, template);
+}
+
+export async function updateTemplate(req, res, id) {
+  const db = await loadDb();
+  const template = (db.templates || []).find(t => t.id === id);
+  if (!template) return send(res, 404, { error: "template_not_found" });
+  const input = await body(req);
+  Object.assign(template, input);
+  await saveDb(db);
+  return send(res, 200, template);
+}
+
+export async function deleteTemplate(req, res, id) {
+  const db = await loadDb();
+  db.templates ||= [];
+  const idx = db.templates.findIndex(t => t.id === id);
+  if (idx === -1) return send(res, 404, { error: "template_not_found" });
+  const deleted = db.templates.splice(idx, 1)[0];
+  if (deleted.isDefault && db.templates.length > 0) {
+    db.templates[0].isDefault = true;
+  }
+  await saveDb(db);
+  return send(res, 200, { success: true });
+}
+
+export async function setDefaultTemplate(req, res, id) {
+  const db = await loadDb();
+  db.templates ||= [];
+  const template = db.templates.find(t => t.id === id);
+  if (!template) return send(res, 404, { error: "template_not_found" });
+  db.templates.forEach(t => { t.isDefault = t.id === id; });
+  await saveDb(db);
+  return send(res, 200, db.templates);
 }

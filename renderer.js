@@ -40,6 +40,7 @@ export function page() {
       <div class="tabs">
         <div class="tab active" data-tab="items">墨锭管理</div>
         <div class="tab" data-tab="batches">批次管理</div>
+        <div class="tab" data-tab="templates">试磨方案模板</div>
       </div>
       <div id="tab-items">
         <form id="createForm">
@@ -55,7 +56,13 @@ export function page() {
           <h2>创建试磨记录</h2>
           <label>选择墨锭</label>
           <select name="id" id="itemSelect"></select>
+          <label>选择方案模板</label>
+          <select id="templateSelect"><option value="">-- 手动填写 --</option></select>
           <div id="extraFields"></div>
+          <label>研磨时长</label>
+          <input name="grindingTime" id="grindingTime">
+          <label>观察重点</label>
+          <textarea name="observationPoints" id="observationPoints"></textarea>
           <button>提交记录</button>
         </form>
       </div>
@@ -64,6 +71,17 @@ export function page() {
           <h2>新增批次</h2>
           <div id="batchFields"></div>
           <button>保存批次</button>
+        </form>
+      </div>
+      <div id="tab-templates" style="display:none">
+        <form id="templateForm">
+          <h2>新增试磨方案模板</h2>
+          <div id="templateFields"></div>
+          <label style="display:flex;align-items:center;gap:8px">
+            <input type="checkbox" name="isDefault" id="templateDefault">
+            <span style="margin:0">设为默认模板</span>
+          </label>
+          <button>保存模板</button>
         </form>
       </div>
     </section>
@@ -95,6 +113,21 @@ export function page() {
           <div id="batchEmpty" class="empty" style="display:none">暂无批次数据，请在左侧新增批次。</div>
         </div>
       </div>
+      <div id="view-templates" style="display:none">
+        <div class="stats" id="templateStats"></div>
+        <div class="panel">
+          <div class="section-title">
+            <h2>试磨方案模板列表 — 预先维护常用的试磨参数</h2>
+          </div>
+          <table id="templateTable">
+            <thead>
+              <tr><th>方案名称</th><th>试磨纸张</th><th>加水量</th><th>研磨时长</th><th>出墨速度</th><th>观察重点</th><th>操作</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div id="templateEmpty" class="empty" style="display:none">暂无模板数据，请在左侧新增模板。</div>
+        </div>
+      </div>
     </section>
   </main>
   <script>
@@ -102,23 +135,30 @@ export function page() {
     const stages = ["待试磨","已试磨","重点观察"];
     const extraFields = [["paper","试磨纸张"],["water","加水量"],["speed","出墨速度"],["colorLayer","墨色层次"],["sediment","沉淀情况"],["score","评分"]];
     const batchFields = [["code","批次编号","text"],["smokeSource","烟料来源","text"],["receiveDate","入库日期","date"],["note","备注说明","textarea"]];
+    const templateFields = [["name","方案名称","text"],["paper","试磨纸张","text"],["water","加水量","text"],["grindingTime","研磨时长","text"],["speed","出墨速度","text"],["observationPoints","观察重点","textarea"]];
 
     const createForm = document.querySelector('#createForm');
     const actionForm = document.querySelector('#actionForm');
     const batchForm = document.querySelector('#batchForm');
+    const templateForm = document.querySelector('#templateForm');
     const cards = document.querySelector('#cards');
     const statsEl = document.querySelector('#stats');
     const batchStatsEl = document.querySelector('#batchStats');
+    const templateStatsEl = document.querySelector('#templateStats');
     const itemSelect = document.querySelector('#itemSelect');
     const batchSelect = document.querySelector('#batchSelect');
+    const templateSelect = document.querySelector('#templateSelect');
     const batchFilter = document.querySelector('#batchFilter');
     const statusFilter = document.querySelector('#statusFilter');
     const statusSelect = document.querySelector('#statusSelect');
     const batchTable = document.querySelector('#batchTable tbody');
+    const templateTable = document.querySelector('#templateTable tbody');
     const batchEmpty = document.querySelector('#batchEmpty');
+    const templateEmpty = document.querySelector('#templateEmpty');
 
     let items = [];
     let batches = [];
+    let templates = [];
 
     async function api(path, options) {
       const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
@@ -131,8 +171,10 @@ export function page() {
       document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab));
       document.querySelector('#tab-items').style.display = tab === 'items' ? '' : 'none';
       document.querySelector('#tab-batches').style.display = tab === 'batches' ? '' : 'none';
+      document.querySelector('#tab-templates').style.display = tab === 'templates' ? '' : 'none';
       document.querySelector('#view-items').style.display = tab === 'items' ? '' : 'none';
       document.querySelector('#view-batches').style.display = tab === 'batches' ? '' : 'none';
+      document.querySelector('#view-templates').style.display = tab === 'templates' ? '' : 'none';
     }
 
     function renderForms() {
@@ -142,22 +184,45 @@ export function page() {
         if (type === 'textarea') return '<label>'+label+'</label><textarea name="'+key+'"></textarea>';
         return '<label>'+label+'</label><input name="'+key+'" type="'+type+'" '+(key==='code'?'required':'')+(key==='receiveDate'?'required':'')+'>';
       }).join('');
+      document.querySelector('#templateFields').innerHTML = templateFields.map(([key,label,type]) => {
+        if (type === 'textarea') return '<label>'+label+'</label><textarea name="'+key+'"></textarea>';
+        return '<label>'+label+'</label><input name="'+key+'" type="'+type+'" '+(key==='name'?'required':'')+'>';
+      }).join('');
       statusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
       statusSelect.innerHTML = stages.map(s => '<option>'+s+'</option>').join('');
     }
 
     function getBatchById(id) { return batches.find(b => b.id === id); }
 
+    function applyTemplate(templateId) {
+      const tpl = templates.find(t => t.id === templateId);
+      if (!tpl) return;
+      const formData = new FormData(actionForm);
+      formData.set('paper', tpl.paper || '');
+      formData.set('water', tpl.water || '');
+      formData.set('speed', tpl.speed || '');
+      formData.set('grindingTime', tpl.grindingTime || '');
+      formData.set('observationPoints', tpl.observationPoints || '');
+      for (const [key, value] of formData.entries()) {
+        const el = actionForm.querySelector('[name="'+key+'"]');
+        if (el) el.value = value;
+      }
+    }
+
     function render() {
       batchSelect.innerHTML = '<option value="">无（单独录入）</option>' + batches.map(b => '<option value="'+b.id+'">'+b.code+' · '+b.smokeSource+'</option>').join('');
       batchFilter.innerHTML = '<option value="">全部批次</option>' + batches.map(b => '<option value="'+b.id+'">'+b.code+' · '+b.smokeSource+'</option>').join('');
       itemSelect.innerHTML = items.map(item => '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.name || item.shipType || item.source || item.plateSize || item.smokeSource || '')+'</option>').join('');
+      templateSelect.innerHTML = '<option value="">-- 手动填写 --</option>' + templates.map(t => '<option value="'+t.id+'" '+(t.isDefault?'selected':'')+'>'+t.name+(t.isDefault?' (默认)':'')+'</option>').join('');
 
       const stats = Object.fromEntries(stages.map(s => [s, items.filter(i => i.status === s).length]));
       statsEl.innerHTML = Object.entries(stats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
 
       const batchStats = { '批次总数': batches.length, '墨锭总数': items.length, '已完成批次': batches.filter(b => { const it = items.filter(i => i.batchId === b.id); return it.length > 0 && it.every(i => i.status === '已试磨'); }).length };
       batchStatsEl.innerHTML = Object.entries(batchStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
+
+      const templateStats = { '模板总数': templates.length, '默认模板': templates.filter(t => t.isDefault).length };
+      templateStatsEl.innerHTML = Object.entries(templateStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
 
       const status = statusFilter.value;
       const q = document.querySelector('#search').value.trim();
@@ -183,6 +248,19 @@ export function page() {
           return '<tr><td class="batch-code">'+b.code+'</td><td>'+b.smokeSource+'</td><td>'+b.receiveDate+'</td><td>'+prog.total+' 件</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress" style="flex:1;min-width:80px"><div class="progress-bar" style="width:'+prog.percent+'%"></div></div><span class="meta">'+prog.tested+'/'+prog.total+' ('+prog.percent+'%)</span></div></td><td class="meta">'+(b.note || '-')+'</td></tr>';
         }).join('');
       }
+
+      if (templates.length === 0) {
+        templateTable.parentElement.style.display = 'none';
+        templateEmpty.style.display = '';
+      } else {
+        templateTable.parentElement.style.display = '';
+        templateEmpty.style.display = 'none';
+        templateTable.innerHTML = templates.map(t => {
+          return '<tr><td>'+(t.isDefault?'<span class="pill gold">默认</span> ':'')+t.name+'</td><td>'+(t.paper||'-')+'</td><td>'+(t.water||'-')+'</td><td>'+(t.grindingTime||'-')+'</td><td>'+(t.speed||'-')+'</td><td class="meta">'+(t.observationPoints||'-')+'</td><td><div style="display:flex;gap:6px"><button class="secondary" data-default="'+t.id+'" '+(t.isDefault?'disabled style="opacity:0.5"':'')+'>设为默认</button><button class="secondary" style="background:var(--warn)" data-delete="'+t.id+'">删除</button></div></td></tr>';
+        }).join('');
+        document.querySelectorAll('[data-default]').forEach(btn => btn.onclick = async () => { await api('/api/templates/'+btn.dataset.default+'/default', { method:'POST' }); await load(); });
+        document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = async () => { if (confirm('确定删除此模板？')) { await api('/api/templates/'+btn.dataset.delete, { method:'DELETE' }); await load(); } });
+      }
     }
 
     function cardHtml(item) {
@@ -195,8 +273,12 @@ export function page() {
     }
 
     async function load() {
-      [items, batches] = await Promise.all([api('/api/items'), api('/api/batches')]);
+      [items, batches, templates] = await Promise.all([api('/api/items'), api('/api/batches'), api('/api/templates')]);
       render();
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl && templateSelect.value === defaultTpl.id) {
+        applyTemplate(defaultTpl.id);
+      }
     }
 
     createForm.onsubmit = async event => {
@@ -216,6 +298,21 @@ export function page() {
       await api('/api/batches', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(batchForm).entries())) });
       batchForm.reset();
       await load();
+    };
+    templateForm.onsubmit = async event => {
+      event.preventDefault();
+      const data = Object.fromEntries(new FormData(templateForm).entries());
+      data.isDefault = templateForm.querySelector('[name="isDefault"]').checked;
+      await api('/api/templates', { method:'POST', body: JSON.stringify(data) });
+      templateForm.reset();
+      await load();
+    };
+    templateSelect.onchange = () => {
+      if (templateSelect.value) {
+        applyTemplate(templateSelect.value);
+      } else {
+        actionForm.reset();
+      }
     };
     document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => switchTab(tab.dataset.tab));
     statusFilter.onchange = render;

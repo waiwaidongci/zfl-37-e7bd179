@@ -63,5 +63,27 @@
         }
       ]
     }
+  ],
+  "templates": [
+    {
+      "id": "TPL-001",
+      "name": "标准松烟墨方案",
+      "paper": "净皮宣纸",
+      "water": "20滴",
+      "grindingTime": "10分钟",
+      "observationPoints": "墨色层次、沉淀情况、出墨速度",
+      "speed": "中",
+      "isDefault": true
+    },
+    {
+      "id": "TPL-002",
+      "name": "油烟墨精磨方案",
+      "paper": "棉连纸",
+      "water": "15滴",
+      "grindingTime": "15分钟",
+      "observationPoints": "墨色浓淡、光泽度、颗粒细腻度",
+      "speed": "慢",
+      "isDefault": false
+    }
   ]
 }

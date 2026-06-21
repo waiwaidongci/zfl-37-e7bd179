@@ -71,6 +71,28 @@ const seed = {
         }
       ]
     }
+  ],
+  "templates": [
+    {
+      "id": "TPL-001",
+      "name": "标准松烟墨方案",
+      "paper": "净皮宣纸",
+      "water": "20滴",
+      "grindingTime": "10分钟",
+      "observationPoints": "墨色层次、沉淀情况、出墨速度",
+      "speed": "中",
+      "isDefault": true
+    },
+    {
+      "id": "TPL-002",
+      "name": "油烟墨精磨方案",
+      "paper": "棉连纸",
+      "water": "15滴",
+      "grindingTime": "15分钟",
+      "observationPoints": "墨色浓淡、光泽度、颗粒细腻度",
+      "speed": "慢",
+      "isDefault": false
+    }
   ]
 };
 
@@ -79,8 +101,9 @@ const statLabels = ["待试磨", "已试磨", "重点观察"];
 const fields = [["code", "墨锭编号", "text"], ["smokeSource", "烟料来源", "text"], ["glueRatio", "胶料比例", "text"], ["ageYears", "存放年限", "number"], ["storage", "存放位置", "text"]];
 const extraFields = [["paper", "试磨纸张"], ["water", "加水量"], ["speed", "出墨速度"], ["colorLayer", "墨色层次"], ["sediment", "沉淀情况"], ["score", "评分"]];
 const batchFields = [["code", "批次编号", "text"], ["smokeSource", "烟料来源", "text"], ["receiveDate", "入库日期", "date"], ["note", "备注说明", "textarea"]];
+const templateFields = [["name", "方案名称", "text"], ["paper", "试磨纸张", "text"], ["water", "加水量", "text"], ["grindingTime", "研磨时长", "text"], ["speed", "出墨速度", "text"], ["observationPoints", "观察重点", "textarea"]];
 
-export const config = { stages, statLabels, fields, extraFields, batchFields };
+export const config = { stages, statLabels, fields, extraFields, batchFields, templateFields };
 
 export async function loadDb() {
   if (!existsSync(dbPath)) {
@@ -91,7 +114,9 @@ export async function loadDb() {
   let changed = false;
   if (!db.batches) { db.batches = []; changed = true; }
   if (!db.items) { db.items = []; changed = true; }
+  if (!db.templates) { db.templates = []; changed = true; }
   for (const item of db.items) { if (!item.id) { item.id = item.code || ("IS-" + Date.now() + Math.random().toString(36).slice(2,5)); changed = true; } }
+  for (const tpl of db.templates) { if (!tpl.id) { tpl.id = newTemplateId(); changed = true; } if (tpl.isDefault === undefined) { tpl.isDefault = false; changed = true; } }
   if (changed) await saveDb(db);
   return db;
 }
@@ -128,4 +153,12 @@ export function computeBatchProgress(batch, items) {
   const total = batchItems.length;
   const tested = batchItems.filter(i => i.status === "已试磨").length;
   return { total, tested, percent: total ? Math.round((tested / total) * 100) : 0 };
+}
+
+export function newTemplateId() {
+  return "TPL-" + Date.now() + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+export function getDefaultTemplate(templates) {
+  return templates.find(t => t.isDefault) || templates[0] || null;
 }
