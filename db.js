@@ -124,7 +124,7 @@ const seed = {
       "name": "待改进（建议复测）",
       "minScore": 0,
       "maxScore": 69,
-      "resultStatus": "待试磨",
+      "resultStatus": "建议复测",
       "hintText": "试磨评分偏低，建议调整参数后复测",
       "order": 3,
       "createdAt": "2026-01-01T00:00:00.000Z",

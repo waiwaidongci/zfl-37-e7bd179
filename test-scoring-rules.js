@@ -1,4 +1,4 @@
-import { matchRule, validateRule, getSortedRules, getCoverageSummary, defaultScoringRules } from "./scoringRules.js";
+import { matchRule, validateRule, getSortedRules, getCoverageSummary, defaultScoringRules, collectStatuses } from "./scoringRules.js";
 
 let passed = 0;
 let failed = 0;
@@ -67,7 +67,7 @@ test("70分匹配「合格（重点观察）」", () => {
 test("69分匹配「待改进（建议复测）」", () => {
   const result = matchRule(69, defaultScoringRules);
   assertTruthy(result);
-  assertEq(result.resultStatus, "待试磨");
+  assertEq(result.resultStatus, "建议复测");
   assertEq(result.ruleName, "待改进（建议复测）");
   assertEq(result.matchedRange, "0-69");
 });
@@ -75,7 +75,7 @@ test("69分匹配「待改进（建议复测）」", () => {
 test("0分匹配「待改进（建议复测）」", () => {
   const result = matchRule(0, defaultScoringRules);
   assertTruthy(result);
-  assertEq(result.resultStatus, "待试磨");
+  assertEq(result.resultStatus, "建议复测");
 });
 
 test("NaN分数不匹配任何规则", () => {
@@ -245,6 +245,51 @@ test("匹配结果包含所有必要字段", () => {
   assertTruthy(result.hintText !== undefined);
   assertTruthy(result.matchedRange);
   assertEq(typeof result.score, "number");
+});
+
+console.log("");
+console.log("--- 8. 自定义状态收集测试 ---");
+
+test("默认规则收集到4种状态：含建议复测", () => {
+  const statuses = collectStatuses(defaultScoringRules);
+  assertTruthy(statuses.includes("待试磨"));
+  assertTruthy(statuses.includes("已试磨"));
+  assertTruthy(statuses.includes("重点观察"));
+  assertTruthy(statuses.includes("建议复测"));
+  assertEq(statuses.length, 4);
+});
+
+test("基础状态在前，自定义状态在后", () => {
+  const statuses = collectStatuses(defaultScoringRules);
+  assertEq(statuses[0], "待试磨");
+  assertEq(statuses[1], "已试磨");
+  assertEq(statuses[2], "重点观察");
+  assertEq(statuses[3], "建议复测");
+});
+
+test("items中的状态也被收集", () => {
+  const rules = [{ id: "1", name: "r1", minScore: 0, maxScore: 100, resultStatus: "返修中" }];
+  const items = [{ status: "已报废" }, { status: "建议复测" }];
+  const statuses = collectStatuses(rules, items);
+  assertTruthy(statuses.includes("返修中"));
+  assertTruthy(statuses.includes("已报废"));
+  assertTruthy(statuses.includes("建议复测"));
+  assertTruthy(statuses.includes("待试磨"));
+  assertTruthy(statuses.includes("已试磨"));
+  assertTruthy(statuses.includes("重点观察"));
+});
+
+test("空输入仍返回基础状态", () => {
+  const statuses = collectStatuses(null, null);
+  assertEq(statuses, ["待试磨", "已试磨", "重点观察"]);
+});
+
+test("去重：规则和items中重复的状态只出现一次", () => {
+  const rules = [{ id: "1", name: "r1", minScore: 0, maxScore: 50, resultStatus: "建议复测" }];
+  const items = [{ status: "建议复测" }, { status: "已试磨" }];
+  const statuses = collectStatuses(rules, items);
+  const count = statuses.filter(s => s === "建议复测").length;
+  assertEq(count, 1);
 });
 
 console.log("");

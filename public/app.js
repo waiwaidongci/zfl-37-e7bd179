@@ -62,6 +62,7 @@ let itemTaskCache = {};
 let selectedCompareIds = new Set();
 let scoringRules = [];
 let scoringCoverage = null;
+let scoringStatuses = [];
 
 async function api(path, options) {
   const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
@@ -89,6 +90,18 @@ function switchTab(tab) {
   }
 }
 
+function statusClass(status) {
+  const s = (status || '').toString();
+  if (s === '待试磨') return 'pending';
+  if (s === '已试磨') return 'done';
+  if (s === '重点观察') return 'watch';
+  if (/复测|重测|返修/.test(s)) return 'retest';
+  if (/完成|合格|通过|优秀/.test(s)) return 'done';
+  if (/观察|注意|检查|待/.test(s)) return 'watch';
+  if (/进行|中|处理|评估/.test(s)) return 'ongoing';
+  return 'custom';
+}
+
 function renderForms() {
   document.querySelector('#fields').innerHTML = fields.map(([key,label,type]) => '<label>'+label+'</label><input name="'+key+'" type="'+type+'" '+(key==='code'?'required':'')+'>').join('');
   document.querySelector('#extraFields').innerHTML = extraFields.map(([key,label]) => '<label>'+label+'</label><input name="'+key+'">').join('');
@@ -100,9 +113,18 @@ function renderForms() {
     if (type === 'textarea') return '<label>'+label+'</label><textarea name="'+key+'"></textarea>';
     return '<label>'+label+'</label><input name="'+key+'" type="'+type+'" '+(key==='name'?'required':'')+'>';
   }).join('');
-  statusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
-  storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
-  statusSelect.innerHTML = stages.map(s => '<option>'+s+'</option>').join('');
+  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
+  statusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+  storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+  statusSelect.innerHTML = stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+  const revisionStatusEl = document.querySelector('#revisionStatus');
+  if (revisionStatusEl) {
+    revisionStatusEl.innerHTML = '<option value="">不修改</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+  }
+  const srResultStatusEl = document.querySelector('#srResultStatus');
+  if (srResultStatusEl) {
+    srResultStatusEl.innerHTML = '<option value="">-- 选择或自定义 --</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+  }
   taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option>'+s+'</option>').join('');
   const today = new Date().toISOString().slice(0,10);
   document.querySelector('#taskDate').value = today;
@@ -213,8 +235,9 @@ function renderStorageKanban() {
   kanbanCards.parentElement.style.display = '';
   kanbanEmpty.style.display = 'none';
   kanbanCards.innerHTML = storageKanban.map(group => {
-    const countBadges = stages.map(s =>
-      '<div class="kanban-badge ' + (s === '待试磨' ? 'pending' : s === '已试磨' ? 'done' : 'watch') + '">' +
+    const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
+    const countBadges = stagesDynamic.map(s =>
+      '<div class="kanban-badge ' + statusClass(s) + '">' +
         '<span>' + s + '</span>' +
         '<strong>' + (group.counts[s] || 0) + '</strong>' +
       '</div>'
@@ -371,7 +394,7 @@ function render() {
       scoringRuleTable.parentElement.style.display = '';
       if (scoringEmpty) scoringEmpty.style.display = 'none';
       scoringRuleTable.innerHTML = scoringRules.map((r, idx) => {
-        const statusCls = r.resultStatus === '已试磨' ? 'done' : r.resultStatus === '重点观察' ? 'watch' : 'pending';
+        const statusCls = statusClass(r.resultStatus);
         return '<tr>' +
           '<td style="white-space:nowrap">' +
             '<button class="secondary" data-sr-up="'+r.id+'" '+(idx===0?'disabled style="opacity:0.5"':'')+'>↑</button> ' +
@@ -471,7 +494,9 @@ function cardHtml(item, showStorageEdit) {
     '<button class="secondary" data-version-history="'+itemId+'">版本历史（'+versionCount+'）</button>' +
     '<button class="secondary gold" data-revise="'+itemId+'">修订记录</button>' +
   '</div>';
-  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
+  const itemStatusClass = statusClass(item.status);
+  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+itemStatusClass+'">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stagesDynamic.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
 }
 
 function getAssignees() {
@@ -632,6 +657,8 @@ async function load() {
   ]);
   scoringRules = scoringData.rules || [];
   scoringCoverage = scoringData.coverage || null;
+  scoringStatuses = scoringData.statuses || [];
+  renderForms();
   render();
   const defaultTpl = templates.find(t => t.isDefault);
   if (defaultTpl && templateSelect.value === defaultTpl.id) {
@@ -674,15 +701,35 @@ templateSelect.onchange = () => {
 };
 const scoringRuleForm = document.querySelector('#scoringRuleForm');
 let editingScoringRuleId = null;
+const srResultStatusCustomCheck = document.querySelector('#srResultStatusCustomCheck');
+const srResultStatusCustom = document.querySelector('#srResultStatusCustom');
+if (srResultStatusCustomCheck) {
+  srResultStatusCustomCheck.onchange = () => {
+    if (srResultStatusCustom) {
+      srResultStatusCustom.style.display = srResultStatusCustomCheck.checked ? '' : 'none';
+      const srSelect = document.querySelector('#srResultStatus');
+      if (srSelect) srSelect.disabled = srResultStatusCustomCheck.checked;
+      if (srResultStatusCustomCheck.checked && !srResultStatusCustom.value) {
+        srResultStatusCustom.focus();
+      }
+    }
+  };
+}
 if (scoringRuleForm) {
   scoringRuleForm.onsubmit = async event => {
     event.preventDefault();
     const fd = new FormData(scoringRuleForm);
+    let resultStatusValue = '';
+    if (srResultStatusCustomCheck && srResultStatusCustomCheck.checked) {
+      resultStatusValue = fd.get('resultStatusCustom')?.toString().trim() || '';
+    } else {
+      resultStatusValue = fd.get('resultStatus')?.toString() || '';
+    }
     const data = {
       name: fd.get('name')?.toString() || '',
       minScore: Number(fd.get('minScore')),
       maxScore: Number(fd.get('maxScore')),
-      resultStatus: fd.get('resultStatus')?.toString() || '',
+      resultStatus: resultStatusValue,
       hintText: fd.get('hintText')?.toString() || '',
       order: Number(fd.get('order') || 0)
     };
@@ -696,6 +743,13 @@ if (scoringRuleForm) {
         await api('/api/scoring-rules', { method:'POST', body: JSON.stringify(data) });
       }
       scoringRuleForm.reset();
+      if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
+      if (srResultStatusCustom) {
+        srResultStatusCustom.style.display = 'none';
+        srResultStatusCustom.value = '';
+      }
+      const srSelect = document.querySelector('#srResultStatus');
+      if (srSelect) srSelect.disabled = false;
       document.querySelector('#srOrder').value = '0';
       await load();
     } catch(err) {
@@ -721,7 +775,7 @@ if (srTestBtn) {
       if (result.match) {
         resultEl.innerHTML = '分数 <strong>' + score + '</strong> 命中规则：<strong>' + escapeHtml(result.match.ruleName) + '</strong>（区间 ' + result.match.matchedRange + '）→ 状态：<span class="pill done">' + escapeHtml(result.match.resultStatus) + '</span>' + (result.match.hintText ? '<br><span class="meta">提示：' + escapeHtml(result.match.hintText) + '</span>' : '');
       } else {
-        resultEl.innerHTML = '<span class="warn">分数 ' + score + ' 未匹配任何规则，将使用默认判断（≥85已试磨，否则重点观察）</span>';
+        resultEl.innerHTML = '<span class="warn">分数 ' + score + ' 未匹配任何规则，状态将保持不变并记录规则警告日志。建议调整规则以覆盖该分值。</span>';
       }
     } catch(err) {
       resultEl.innerHTML = '<span class="warn">测试失败：' + escapeHtml(err.message || '未知错误') + '</span>';
@@ -735,7 +789,21 @@ function openScoringRuleEditor(id) {
   document.querySelector('#srName').value = rule.name || '';
   document.querySelector('#srMinScore').value = rule.minScore;
   document.querySelector('#srMaxScore').value = rule.maxScore;
-  document.querySelector('#srResultStatus').value = rule.resultStatus || '待试磨';
+  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
+  const srSelect = document.querySelector('#srResultStatus');
+  const isPreset = (rule.resultStatus || '').trim() && stagesDynamic.includes(rule.resultStatus);
+  if (srSelect) {
+    srSelect.innerHTML = '<option value="">-- 选择或自定义 --</option>' + stagesDynamic.map(s => '<option>' + s + '</option>').join('');
+    srSelect.value = isPreset ? rule.resultStatus : '';
+    srSelect.disabled = !isPreset && (rule.resultStatus || '').trim();
+  }
+  if (srResultStatusCustomCheck) {
+    srResultStatusCustomCheck.checked = !isPreset && (rule.resultStatus || '').trim();
+  }
+  if (srResultStatusCustom) {
+    srResultStatusCustom.value = (!isPreset && (rule.resultStatus || '').trim()) ? rule.resultStatus : '';
+    srResultStatusCustom.style.display = (!isPreset && (rule.resultStatus || '').trim()) ? '' : 'none';
+  }
   document.querySelector('#srHintText').value = rule.hintText || '';
   document.querySelector('#srOrder').value = rule.order ?? 0;
   const form = document.querySelector('#scoringRuleForm');

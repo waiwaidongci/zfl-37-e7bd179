@@ -15,6 +15,7 @@
       "note": "新批次试样"
     }
   ],
+  "importBatches": [],
   "items": [
     {
       "id": "IS-001",
@@ -24,24 +25,29 @@
       "glueRatio": "7.5%",
       "ageYears": 8,
       "storage": "恒湿柜B",
-      "status": "已试磨",
+      "status": "已入藏",
       "logs": [
         {
           "at": "2026-06-11",
           "step": "试磨",
           "note": "宣纸20滴水，出墨快，评分86",
           "score": 86
-        }
-      ],
-      "tests": [
+        },
         {
-          "at": "2026-06-11",
-          "paper": "宣纸",
-          "water": "20滴",
-          "speed": "快",
-          "colorLayer": "好",
-          "sediment": "少",
-          "score": 86
+          "at": "2026-06-21T10:16:59.658Z",
+          "step": "试磨",
+          "note": "宣纸，15滴，研磨8分钟，评分65，命中规则：待改进（建议复测）",
+          "score": 65,
+          "ruleId": "SCR-DEFAULT-LOW",
+          "ruleName": "待改进（建议复测）"
+        },
+        {
+          "at": "2026-06-21T10:17:26.939Z",
+          "step": "试磨",
+          "note": "净皮宣纸，20滴，研磨12分钟，评分97，命中规则：优异（已入藏）",
+          "score": 97,
+          "ruleId": "SCR-1782037046751HB8D",
+          "ruleName": "优异（已入藏）"
         }
       ],
       "versions": [
@@ -67,22 +73,196 @@
                 "score": 86
               }
             ],
-            "tests": [
+            "tests": []
+          },
+          "changes": null
+        },
+        {
+          "version": 2,
+          "createdAt": "2026-06-21T10:16:59.658Z",
+          "createdBy": "未指定用户",
+          "reason": "创建试磨记录，评分65",
+          "action": "revise",
+          "parentVersion": 1,
+          "snapshot": {
+            "status": "建议复测",
+            "storage": "恒湿柜B",
+            "smokeSource": "黄山松烟",
+            "glueRatio": "7.5%",
+            "ageYears": 8,
+            "batchId": "BAT-20260611-01",
+            "logs": [
               {
                 "at": "2026-06-11",
-                "paper": "宣纸",
-                "water": "20滴",
-                "speed": "快",
-                "colorLayer": "好",
-                "sediment": "少",
+                "step": "试磨",
+                "note": "宣纸20滴水，出墨快，评分86",
                 "score": 86
+              },
+              {
+                "at": "2026-06-21T10:16:59.658Z",
+                "step": "试磨",
+                "note": "宣纸，15滴，研磨8分钟，评分65，命中规则：待改进（建议复测）",
+                "score": 65,
+                "ruleId": "SCR-DEFAULT-LOW",
+                "ruleName": "待改进（建议复测）"
+              }
+            ],
+            "tests": [
+              {
+                "at": "2026-06-21T10:16:59.658Z",
+                "score": 65,
+                "paper": "宣纸",
+                "water": "15滴",
+                "grindingTime": "8分钟",
+                "ruleId": "SCR-DEFAULT-LOW",
+                "ruleName": "待改进（建议复测）",
+                "ruleHint": "试磨评分偏低，建议调整参数后复测"
               }
             ]
           },
-          "changes": null
+          "changes": {
+            "status": {
+              "before": "已试磨",
+              "after": "建议复测"
+            },
+            "testsAdded": [
+              {
+                "at": "2026-06-21T10:16:59.658Z",
+                "score": 65,
+                "paper": "宣纸",
+                "water": "15滴",
+                "grindingTime": "8分钟",
+                "ruleId": "SCR-DEFAULT-LOW",
+                "ruleName": "待改进（建议复测）",
+                "ruleHint": "试磨评分偏低，建议调整参数后复测"
+              }
+            ],
+            "logsAdded": [
+              {
+                "at": "2026-06-21T10:16:59.658Z",
+                "step": "试磨",
+                "note": "宣纸，15滴，研磨8分钟，评分65，命中规则：待改进（建议复测）",
+                "score": 65,
+                "ruleId": "SCR-DEFAULT-LOW",
+                "ruleName": "待改进（建议复测）"
+              }
+            ]
+          }
+        },
+        {
+          "version": 3,
+          "createdAt": "2026-06-21T10:17:26.939Z",
+          "createdBy": "未指定用户",
+          "reason": "创建试磨记录，评分97",
+          "action": "revise",
+          "parentVersion": 2,
+          "snapshot": {
+            "status": "已入藏",
+            "storage": "恒湿柜B",
+            "smokeSource": "黄山松烟",
+            "glueRatio": "7.5%",
+            "ageYears": 8,
+            "batchId": "BAT-20260611-01",
+            "logs": [
+              {
+                "at": "2026-06-11",
+                "step": "试磨",
+                "note": "宣纸20滴水，出墨快，评分86",
+                "score": 86
+              },
+              {
+                "at": "2026-06-21T10:16:59.658Z",
+                "step": "试磨",
+                "note": "宣纸，15滴，研磨8分钟，评分65，命中规则：待改进（建议复测）",
+                "score": 65,
+                "ruleId": "SCR-DEFAULT-LOW",
+                "ruleName": "待改进（建议复测）"
+              },
+              {
+                "at": "2026-06-21T10:17:26.939Z",
+                "step": "试磨",
+                "note": "净皮宣纸，20滴，研磨12分钟，评分97，命中规则：优异（已入藏）",
+                "score": 97,
+                "ruleId": "SCR-1782037046751HB8D",
+                "ruleName": "优异（已入藏）"
+              }
+            ],
+            "tests": [
+              {
+                "at": "2026-06-21T10:16:59.658Z",
+                "score": 65,
+                "paper": "宣纸",
+                "water": "15滴",
+                "grindingTime": "8分钟",
+                "ruleId": "SCR-DEFAULT-LOW",
+                "ruleName": "待改进（建议复测）",
+                "ruleHint": "试磨评分偏低，建议调整参数后复测"
+              },
+              {
+                "at": "2026-06-21T10:17:26.939Z",
+                "score": 97,
+                "paper": "净皮宣纸",
+                "water": "20滴",
+                "grindingTime": "12分钟",
+                "ruleId": "SCR-1782037046751HB8D",
+                "ruleName": "优异（已入藏）",
+                "ruleHint": "品质优异，正式入藏存档"
+              }
+            ]
+          },
+          "changes": {
+            "status": {
+              "before": "建议复测",
+              "after": "已入藏"
+            },
+            "testsAdded": [
+              {
+                "at": "2026-06-21T10:17:26.939Z",
+                "score": 97,
+                "paper": "净皮宣纸",
+                "water": "20滴",
+                "grindingTime": "12分钟",
+                "ruleId": "SCR-1782037046751HB8D",
+                "ruleName": "优异（已入藏）",
+                "ruleHint": "品质优异，正式入藏存档"
+              }
+            ],
+            "logsAdded": [
+              {
+                "at": "2026-06-21T10:17:26.939Z",
+                "step": "试磨",
+                "note": "净皮宣纸，20滴，研磨12分钟，评分97，命中规则：优异（已入藏）",
+                "score": 97,
+                "ruleId": "SCR-1782037046751HB8D",
+                "ruleName": "优异（已入藏）"
+              }
+            ]
+          }
         }
       ],
-      "currentVersion": 1
+      "currentVersion": 3,
+      "tests": [
+        {
+          "at": "2026-06-21T10:16:59.658Z",
+          "score": 65,
+          "paper": "宣纸",
+          "water": "15滴",
+          "grindingTime": "8分钟",
+          "ruleId": "SCR-DEFAULT-LOW",
+          "ruleName": "待改进（建议复测）",
+          "ruleHint": "试磨评分偏低，建议调整参数后复测"
+        },
+        {
+          "at": "2026-06-21T10:17:26.939Z",
+          "score": 97,
+          "paper": "净皮宣纸",
+          "water": "20滴",
+          "grindingTime": "12分钟",
+          "ruleId": "SCR-1782037046751HB8D",
+          "ruleName": "优异（已入藏）",
+          "ruleHint": "品质优异，正式入藏存档"
+        }
+      ]
     },
     {
       "id": "IS-002",
@@ -92,7 +272,7 @@
       "glueRatio": "8%",
       "ageYears": 3,
       "storage": "试样盒C",
-      "status": "已试磨",
+      "status": "重点观察",
       "logs": [
         {
           "at": "2026-06-21T03:50:28.907Z",
@@ -101,12 +281,16 @@
           "score": 79
         },
         {
-          "at": "2026-06-21T09:36:04.722Z",
+          "at": "2026-06-21T10:17:10.129Z",
+          "step": "规则",
+          "note": "评分90未匹配规则，状态保持重点观察",
+          "score": 90
+        },
+        {
+          "at": "2026-06-21T10:17:10.129Z",
           "step": "试磨",
-          "note": "净皮宣纸，20滴，评分90，命中规则：优秀（已试磨）",
-          "score": 90,
-          "ruleId": "SCR-DEFAULT-HIGH",
-          "ruleName": "优秀（已试磨）"
+          "note": "宣纸，20滴，研磨10分钟，评分90",
+          "score": 90
         }
       ],
       "tests": [
@@ -120,14 +304,11 @@
           "score": 79
         },
         {
-          "at": "2026-06-21T09:36:04.722Z",
-          "paper": "净皮宣纸",
-          "water": "20滴",
+          "at": "2026-06-21T10:17:10.129Z",
           "score": 90,
-          "createdBy": "测试用户",
-          "ruleId": "SCR-DEFAULT-HIGH",
-          "ruleName": "优秀（已试磨）",
-          "ruleHint": "试磨评分优秀，可正式使用"
+          "paper": "宣纸",
+          "water": "20滴",
+          "grindingTime": "10分钟"
         }
       ],
       "versions": [
@@ -169,13 +350,13 @@
         },
         {
           "version": 2,
-          "createdAt": "2026-06-21T09:36:04.722Z",
-          "createdBy": "测试用户",
+          "createdAt": "2026-06-21T10:17:10.129Z",
+          "createdBy": "未指定用户",
           "reason": "创建试磨记录，评分90",
           "action": "revise",
           "parentVersion": 1,
           "snapshot": {
-            "status": "已试磨",
+            "status": "重点观察",
             "storage": "试样盒C",
             "smokeSource": "桐油烟",
             "glueRatio": "8%",
@@ -189,12 +370,16 @@
                 "score": 79
               },
               {
-                "at": "2026-06-21T09:36:04.722Z",
+                "at": "2026-06-21T10:17:10.129Z",
+                "step": "规则",
+                "note": "评分90未匹配规则，状态保持重点观察",
+                "score": 90
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
                 "step": "试磨",
-                "note": "净皮宣纸，20滴，评分90，命中规则：优秀（已试磨）",
-                "score": 90,
-                "ruleId": "SCR-DEFAULT-HIGH",
-                "ruleName": "优秀（已试磨）"
+                "note": "宣纸，20滴，研磨10分钟，评分90",
+                "score": 90
               }
             ],
             "tests": [
@@ -208,42 +393,36 @@
                 "score": 79
               },
               {
-                "at": "2026-06-21T09:36:04.722Z",
-                "paper": "净皮宣纸",
-                "water": "20滴",
+                "at": "2026-06-21T10:17:10.129Z",
                 "score": 90,
-                "createdBy": "测试用户",
-                "ruleId": "SCR-DEFAULT-HIGH",
-                "ruleName": "优秀（已试磨）",
-                "ruleHint": "试磨评分优秀，可正式使用"
+                "paper": "宣纸",
+                "water": "20滴",
+                "grindingTime": "10分钟"
               }
             ]
           },
           "changes": {
-            "status": {
-              "before": "重点观察",
-              "after": "已试磨"
-            },
             "testsAdded": [
               {
-                "at": "2026-06-21T09:36:04.722Z",
-                "paper": "净皮宣纸",
-                "water": "20滴",
+                "at": "2026-06-21T10:17:10.129Z",
                 "score": 90,
-                "createdBy": "测试用户",
-                "ruleId": "SCR-DEFAULT-HIGH",
-                "ruleName": "优秀（已试磨）",
-                "ruleHint": "试磨评分优秀，可正式使用"
+                "paper": "宣纸",
+                "water": "20滴",
+                "grindingTime": "10分钟"
               }
             ],
             "logsAdded": [
               {
-                "at": "2026-06-21T09:36:04.722Z",
+                "at": "2026-06-21T10:17:10.129Z",
+                "step": "规则",
+                "note": "评分90未匹配规则，状态保持重点观察",
+                "score": 90
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
                 "step": "试磨",
-                "note": "净皮宣纸，20滴，评分90，命中规则：优秀（已试磨）",
-                "score": 90,
-                "ruleId": "SCR-DEFAULT-HIGH",
-                "ruleName": "优秀（已试磨）"
+                "note": "宣纸，20滴，研磨10分钟，评分90",
+                "score": 90
               }
             ]
           }
@@ -274,20 +453,7 @@
       "isDefault": false
     }
   ],
-  "tasks": [],
-  "importBatches": [],
   "scoringRules": [
-    {
-      "id": "SCR-DEFAULT-HIGH",
-      "name": "优秀（已试磨）",
-      "minScore": 85,
-      "maxScore": 100,
-      "resultStatus": "已试磨",
-      "hintText": "试磨评分优秀，可正式使用",
-      "order": 1,
-      "createdAt": "2026-01-01T00:00:00.000Z",
-      "updatedAt": "2026-01-01T00:00:00.000Z"
-    },
     {
       "id": "SCR-DEFAULT-MID",
       "name": "合格（重点观察）",
@@ -304,11 +470,23 @@
       "name": "待改进（建议复测）",
       "minScore": 0,
       "maxScore": 69,
-      "resultStatus": "待试磨",
+      "resultStatus": "建议复测",
       "hintText": "试磨评分偏低，建议调整参数后复测",
       "order": 3,
       "createdAt": "2026-01-01T00:00:00.000Z",
       "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "SCR-1782037046751HB8D",
+      "name": "优异（已入藏）",
+      "minScore": 95,
+      "maxScore": 100,
+      "resultStatus": "已入藏",
+      "hintText": "品质优异，正式入藏存档",
+      "order": 0,
+      "createdAt": "2026-06-21T10:17:26.751Z",
+      "updatedAt": "2026-06-21T10:17:26.751Z"
     }
-  ]
+  ],
+  "tasks": []
 }

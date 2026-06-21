@@ -1,6 +1,6 @@
 import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions } from "./db.js";
 import { analyzeCSV, buildImportItems } from "./csvImporter.js";
-import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId } from "./scoringRules.js";
+import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId, collectStatuses } from "./scoringRules.js";
 
 export async function body(req) {
   const chunks = [];
@@ -111,7 +111,10 @@ export async function addAction(req, res, id) {
   if (ruleMatch) {
     item.status = ruleMatch.resultStatus;
   } else {
-    item.status = score >= 85 ? "已试磨" : "重点观察";
+    if (!item.status) item.status = "待试磨";
+    const warnNote = "评分" + score + "未匹配规则，状态保持" + item.status;
+    item.logs ||= [];
+    item.logs.push({ at: new Date().toISOString(), step: "规则", note: warnNote, score });
   }
   const noteParts = [];
   if (input.paper) noteParts.push(input.paper);
@@ -185,9 +188,11 @@ export async function getBatch(req, res, id) {
 
 export async function getStats(req, res) {
   const db = await loadDb();
-  const stats = Object.fromEntries(["待试磨", "已试磨", "重点观察"].map(label => [label, 0]));
+  const statuses = collectStatuses(db.scoringRules || [], db.items || []);
+  const stats = Object.fromEntries(statuses.map(label => [label, 0]));
   for (const item of db.items) {
-    if (stats[item.status] !== undefined) stats[item.status] += 1;
+    if (stats[item.status] === undefined) stats[item.status] = 0;
+    stats[item.status] += 1;
   }
   return send(res, 200, stats);
 }
@@ -390,7 +395,10 @@ export async function completeTask(req, res, id) {
     if (ruleMatch) {
       item.status = ruleMatch.resultStatus;
     } else {
-      item.status = score >= 85 ? "已试磨" : "重点观察";
+      if (!item.status) item.status = "待试磨";
+      const warnNote = "评分" + score + "未匹配规则，状态保持" + item.status;
+      item.logs ||= [];
+      item.logs.push({ at: new Date().toISOString(), step: "规则", note: warnNote, score });
     }
     item.logs ||= [];
     const noteParts = [];
@@ -598,19 +606,22 @@ export async function createRevision(req, res, id) {
     if (score > 0) {
       if (ruleMatch) {
         item.status = ruleMatch.resultStatus;
-      } else {
-        item.status = score >= 85 ? "已试磨" : "重点观察";
-      }
-      if (ruleMatch && input.appendLog === undefined) {
         item.logs ||= [];
-        item.logs.push({
-          at: new Date().toISOString(),
-          step: "试磨",
-          note: "评分" + score + "，命中规则：" + ruleMatch.ruleName,
-          score,
-          ruleId: ruleMatch.ruleId,
-          ruleName: ruleMatch.ruleName
-        });
+        if (input.appendLog === undefined) {
+          item.logs.push({
+            at: new Date().toISOString(),
+            step: "试磨",
+            note: "评分" + score + "，命中规则：" + ruleMatch.ruleName,
+            score,
+            ruleId: ruleMatch.ruleId,
+            ruleName: ruleMatch.ruleName
+          });
+        }
+      } else {
+        if (!item.status) item.status = "待试磨";
+        item.logs ||= [];
+        const warnNote = "评分" + score + "未匹配规则，状态保持" + item.status;
+        item.logs.push({ at: new Date().toISOString(), step: "规则", note: warnNote, score });
       }
     }
     changed = true;
@@ -851,7 +862,8 @@ export async function getScoringRules(req, res) {
   const db = await loadDb();
   const rules = getSortedRules(db.scoringRules || []);
   const coverage = getCoverageSummary(db.scoringRules || []);
-  return send(res, 200, { rules, coverage });
+  const statuses = collectStatuses(db.scoringRules || [], db.items || []);
+  return send(res, 200, { rules, coverage, statuses });
 }
 
 export async function createScoringRule(req, res) {

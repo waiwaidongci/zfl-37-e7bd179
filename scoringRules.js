@@ -26,16 +26,16 @@ export const defaultScoringRules = [
     updatedAt: "2026-01-01T00:00:00.000Z"
   },
   {
-    id: "SCR-DEFAULT-LOW",
-    name: "待改进（建议复测）",
-    minScore: 0,
-    maxScore: 69,
-    resultStatus: "待试磨",
-    hintText: "试磨评分偏低，建议调整参数后复测",
-    order: 3,
-    createdAt: "2026-01-01T00:00:00.000Z",
-    updatedAt: "2026-01-01T00:00:00.000Z"
-  }
+      id: "SCR-DEFAULT-LOW",
+      name: "待改进（建议复测）",
+      minScore: 0,
+      maxScore: 69,
+      resultStatus: "建议复测",
+      hintText: "试磨评分偏低，建议调整参数后复测",
+      order: 3,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    }
 ];
 
 export function initScoringRules(db) {
@@ -143,4 +143,28 @@ export function getCoverageSummary(rules) {
     gaps,
     hasFullCoverage: gaps.length === 0
   };
+}
+
+const BASE_STATUSES = ["待试磨", "已试磨", "重点观察"];
+
+export function collectStatuses(rules, items = []) {
+  const statusSet = new Set(BASE_STATUSES);
+  for (const rule of rules || []) {
+    if (rule.resultStatus && rule.resultStatus.toString().trim()) {
+      statusSet.add(rule.resultStatus.toString().trim());
+    }
+  }
+  for (const item of items || []) {
+    if (item.status && item.status.toString().trim()) {
+      statusSet.add(item.status.toString().trim());
+    }
+  }
+  const ordered = [];
+  for (const s of BASE_STATUSES) {
+    if (statusSet.has(s)) ordered.push(s);
+  }
+  for (const s of statusSet) {
+    if (!BASE_STATUSES.includes(s)) ordered.push(s);
+  }
+  return ordered;
 }

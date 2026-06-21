@@ -666,6 +666,16 @@ table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding
   border-color: #e3bcb1;
   color: var(--warn);
 }
+.pill.retest {
+  background: #eef3fa;
+  border-color: #b8c9e6;
+  color: #4a6b9b;
+}
+.pill.custom {
+  background: #f5f7f2;
+  border-color: #cfd3cb;
+  color: var(--muted);
+}
 
 #scoringRuleTable code {
   background: #f5f7f2;

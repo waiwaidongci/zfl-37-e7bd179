@@ -102,10 +102,15 @@ export function page() {
           </div>
           <label>状态结果</label>
           <select name="resultStatus" id="srResultStatus">
-            <option value="待试磨">待试磨</option>
-            <option value="已试磨">已试磨</option>
-            <option value="重点观察">重点观察</option>
+            <option value="">-- 选择或自定义 --</option>
           </select>
+          <div id="srResultStatusCustomWrap" style="margin-top:6px">
+            <label style="display:flex;align-items:center;gap:8px;margin:0;">
+              <input type="checkbox" id="srResultStatusCustomCheck">
+              <span style="margin:0">自定义状态</span>
+            </label>
+            <input name="resultStatusCustom" id="srResultStatusCustom" type="text" placeholder="输入自定义状态，例如：建议复测" style="margin-top:6px;display:none">
+          </div>
           <label>提示文案</label>
           <textarea name="hintText" id="srHintText" placeholder="例如：试磨评分优秀，可正式使用"></textarea>
           <label>优先级（数字越小越先匹配）</label>
