@@ -138,6 +138,29 @@ const seed = {
       "createdAt": "2026-01-01T00:00:00.000Z",
       "updatedAt": "2026-01-01T00:00:00.000Z"
     }
+  ],
+  "views": [
+    {
+      "id": "VIEW-DEFAULT-ALL",
+      "name": "全部墨锭",
+      "filters": { "status": "", "batchId": "", "keyword": "" },
+      "order": 0,
+      "isSystem": true
+    },
+    {
+      "id": "VIEW-DEFAULT-PENDING",
+      "name": "待试磨清单",
+      "filters": { "status": "待试磨", "batchId": "", "keyword": "" },
+      "order": 1,
+      "isSystem": true
+    },
+    {
+      "id": "VIEW-DEFAULT-WATCHING",
+      "name": "重点观察",
+      "filters": { "status": "重点观察", "batchId": "", "keyword": "" },
+      "order": 2,
+      "isSystem": true
+    }
   ]
 };
 
@@ -165,6 +188,8 @@ export async function loadDb() {
   if (!db.items) { db.items = []; changed = true; }
   if (!db.templates) { db.templates = []; changed = true; }
   if (!db.tasks) { db.tasks = []; changed = true; }
+  if (!db.views) { db.views = []; changed = true; }
+  if (ensureDefaultViews(db)) { changed = true; }
   if (initScoringRules(db)) { changed = true; }
   for (const item of db.items) { if (!item.id) { item.id = item.code || ("IS-" + Date.now() + Math.random().toString(36).slice(2,5)); changed = true; } }
   for (const tpl of db.templates) { if (!tpl.id) { tpl.id = newTemplateId(); changed = true; } if (tpl.isDefault === undefined) { tpl.isDefault = false; changed = true; } }
@@ -208,6 +233,10 @@ export async function loadDb() {
   }
   for (const rule of db.scoringRules || []) {
     if (ensureMetaFields(rule, { createdAt: rule.createdAt, updatedAt: rule.updatedAt })) changed = true;
+  }
+  for (const view of db.views || []) {
+    if (!view.id) { view.id = newViewId(); changed = true; }
+    if (ensureMetaFields(view)) changed = true;
   }
   for (const item of db.items) {
     if (ensureMetaFields(item, { createdAt: (item.logs && item.logs[0]) ? item.logs[0].at : undefined })) changed = true;
@@ -422,6 +451,35 @@ export function newImportBatchId() {
   const d = new Date();
   const ymd = d.getFullYear() + String(d.getMonth() + 1).padStart(2, "0") + String(d.getDate()).padStart(2, "0");
   return "IMP-" + ymd + "-" + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+export function newViewId() {
+  return "VIEW-" + Date.now() + Math.random().toString(36).slice(2, 6).toUpperCase();
+}
+
+export function ensureDefaultViews(db) {
+  let changed = false;
+  const defaultViews = [
+    { id: "VIEW-DEFAULT-ALL", name: "全部墨锭", filters: { status: "", batchId: "", keyword: "" }, order: 0, isSystem: true },
+    { id: "VIEW-DEFAULT-PENDING", name: "待试磨清单", filters: { status: "待试磨", batchId: "", keyword: "" }, order: 1, isSystem: true },
+    { id: "VIEW-DEFAULT-WATCHING", name: "重点观察", filters: { status: "重点观察", batchId: "", keyword: "" }, order: 2, isSystem: true }
+  ];
+  if (!db.views || !Array.isArray(db.views)) {
+    db.views = defaultViews;
+    return true;
+  }
+  for (const dv of defaultViews) {
+    if (!db.views.find(v => v.id === dv.id)) {
+      db.views.push(dv);
+      changed = true;
+    }
+  }
+  for (const view of db.views) {
+    if (!view.filters) { view.filters = { status: "", batchId: "", keyword: "" }; changed = true; }
+    if (view.order === undefined) { view.order = db.views.indexOf(view); changed = true; }
+    if (view.isSystem === undefined) { view.isSystem = false; changed = true; }
+  }
+  return changed;
 }
 
 export function getDefaultTemplate(templates) {

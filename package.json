@@ -7,6 +7,7 @@
     "start": "node server.js",
     "test:scoring": "node test-scoring-rules.js",
     "test:lifecycle": "node test-lifecycle.js",
-    "test": "node test-scoring-rules.js && node test-lifecycle.js"
+    "test:views": "node test-views.js",
+    "test": "node test-scoring-rules.js && node test-lifecycle.js && node test-views.js"
   }
 }

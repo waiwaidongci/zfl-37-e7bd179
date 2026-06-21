@@ -1094,4 +1094,121 @@ table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding
   padding: 1px 6px;
 }
 
+.views-bar {
+  background: #fff;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+}
+.views-bar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+  padding-bottom: 8px;
+  border-bottom: 1px dashed var(--line);
+}
+.views-bar-header strong {
+  font-size: 14px;
+  color: var(--ink);
+}
+.views-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.view-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 12px;
+  background: #f7f9f5;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  transition: all 0.15s ease;
+  position: relative;
+}
+.view-chip:hover {
+  border-color: var(--accent);
+  background: #eff5ea;
+}
+.view-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  box-shadow: 0 2px 8px rgba(82,111,67,0.25);
+}
+.view-chip.active .view-chip-name,
+.view-chip.active .view-chip-desc {
+  color: #fff;
+}
+.view-chip.active .view-chip-name {
+  font-weight: 700;
+}
+.view-chip.match {
+  background: #fff8f0;
+  border-color: #e6d5b8;
+}
+.view-chip.match .view-chip-name {
+  color: var(--gold);
+}
+.view-chip-name {
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ink);
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-chip-desc {
+  font-size: 11px;
+  color: var(--muted);
+}
+.view-chip-delete {
+  border: none;
+  background: transparent;
+  color: var(--muted);
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  min-height: 20px;
+  padding: 0;
+  margin: 0 -4px 0 2px;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 400;
+  transition: all 0.15s ease;
+}
+.view-chip-delete:hover {
+  background: var(--warn);
+  color: #fff;
+}
+.view-chip.active .view-chip-delete {
+  color: rgba(255,255,255,0.85);
+}
+.view-chip.active .view-chip-delete:hover {
+  background: rgba(255,255,255,0.25);
+  color: #fff;
+}
+@media (max-width: 600px) {
+  .views-bar {
+    padding: 10px;
+  }
+  .views-bar-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .view-chip-desc {
+    display: none;
+  }
+}
+
 

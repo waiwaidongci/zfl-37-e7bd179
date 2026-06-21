@@ -64,6 +64,8 @@ let selectedCompareIds = new Set();
 let scoringRules = [];
 let scoringCoverage = null;
 let scoringStatuses = [];
+let views = [];
+let currentViewId = null;
 
 async function api(path, options, extra = {}) {
   const opts = options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : (options || {});
@@ -397,6 +399,125 @@ function renderForms() {
   taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option>'+s+'</option>').join('');
   const today = new Date().toISOString().slice(0,10);
   document.querySelector('#taskDate').value = today;
+}
+
+function renderViews() {
+  const viewsListEl = document.querySelector('#viewsList');
+  if (!viewsListEl) return;
+  if (!views || views.length === 0) {
+    viewsListEl.innerHTML = '<span class="meta" style="padding:4px 8px">暂无视图</span>';
+    return;
+  }
+  const currentFilters = {
+    status: statusFilter.value,
+    batchId: batchFilter.value,
+    keyword: document.querySelector('#search').value.trim()
+  };
+  viewsListEl.innerHTML = views.map(v => {
+    const isActive = currentViewId === v.id;
+    const isCurrentMatch = !isActive &&
+      currentFilters.status === (v.filters.status || '') &&
+      currentFilters.batchId === (v.filters.batchId || '') &&
+      currentFilters.keyword === (v.filters.keyword || '');
+    const filterDesc = [
+      v.filters.status ? '状态:' + v.filters.status : null,
+      v.filters.batchId ? '指定批次' : null,
+      v.filters.keyword ? '关键词:' + v.filters.keyword : null
+    ].filter(Boolean).join(' · ') || '全部';
+    const systemBadge = v.isSystem ? '<span class="pill" style="background:#eef3ea;border-color:#c2d4b3;color:#526f43;font-size:10px;padding:1px 6px">系统</span>' : '';
+    return '<div class="view-chip ' + (isActive ? 'active' : '') + (isCurrentMatch ? ' match' : '') + '" data-view-id="' + v.id + '" title="' + escapeHtml(filterDesc) + '">' +
+      '<span class="view-chip-name" data-view-apply="' + v.id + '">' +
+        systemBadge + ' ' + escapeHtml(v.name) +
+      '</span>' +
+      '<span class="view-chip-desc meta">' + escapeHtml(filterDesc) + '</span>' +
+      (v.isSystem ? '' : '<button class="view-chip-delete" data-view-delete="' + v.id + '" title="删除视图">×</button>') +
+    '</div>';
+  }).join('');
+  viewsListEl.querySelectorAll('[data-view-apply]').forEach(el => el.onclick = () => applyView(el.dataset.viewApply));
+  viewsListEl.querySelectorAll('[data-view-delete]').forEach(btn => btn.onclick = (e) => {
+    e.stopPropagation();
+    deleteView(btn.dataset.viewDelete);
+  });
+}
+
+function applyView(viewId) {
+  const view = views.find(v => v.id === viewId);
+  if (!view) return;
+  currentViewId = viewId;
+  statusFilter.value = view.filters.status || '';
+  batchFilter.value = view.filters.batchId || '';
+  document.querySelector('#search').value = view.filters.keyword || '';
+  renderViews();
+  render();
+}
+
+async function saveCurrentAsView() {
+  const filters = {
+    status: statusFilter.value,
+    batchId: batchFilter.value,
+    keyword: document.querySelector('#search').value.trim()
+  };
+  const defaultName = [
+    filters.status || '全部状态',
+    filters.batchId ? '指定批次' : '全部批次',
+    filters.keyword ? '含' + filters.keyword : ''
+  ].filter(Boolean).join(' · ');
+  const name = prompt('请输入视图名称：', defaultName);
+  if (name === null) return;
+  const trimmed = name.trim();
+  if (!trimmed) { alert('视图名称不能为空'); return; }
+  const createdBy = prompt('请输入保存人姓名：') || '未指定用户';
+  try {
+    await api('/api/views', { method: 'POST', body: JSON.stringify({ name: trimmed, filters, createdBy }) });
+    await load();
+  } catch(err) {
+    if (err.conflict) {
+      showConflictModal(err.conflict, { name: trimmed, filters, createdBy }, () => load(), {
+        path: '/api/views', options: { method: 'POST', body: JSON.stringify({ name: trimmed, filters, createdBy }) },
+        baseVersion: err.conflict.baseVersion, onSuccess: () => load()
+      });
+      return;
+    }
+    alert('保存失败：' + (err.message || '未知错误'));
+  }
+}
+
+async function deleteView(viewId) {
+  const view = views.find(v => v.id === viewId);
+  if (!view) return;
+  if (view.isSystem) { alert('系统预设视图不能删除'); return; }
+  if (!confirm('确定删除视图「' + view.name + '」？')) return;
+  const current = views.find(v => v.id === viewId);
+  const baseVersion = current ? current._version : 0;
+  const path = '/api/views/' + viewId;
+  const options = { method: 'DELETE', body: JSON.stringify({}) };
+  try {
+    await api(path, options, { _baseVersion: baseVersion });
+    if (currentViewId === viewId) currentViewId = null;
+    await load();
+  } catch(err) {
+    if (err.conflict) {
+      if (err.conflict.type === 'delete_conflict') {
+        showDeleteConflictModal(err.conflict, () => {
+          if (currentViewId === viewId) currentViewId = null;
+          load();
+        }, { path, options, baseVersion: err.conflict.baseVersion, onSuccess: () => {
+          if (currentViewId === viewId) currentViewId = null;
+          load();
+        }});
+      } else {
+        showConflictModal(err.conflict, {}, () => {
+          if (currentViewId === viewId) currentViewId = null;
+          load();
+        }, { path, options, baseVersion: err.conflict.baseVersion, onSuccess: () => {
+          if (currentViewId === viewId) currentViewId = null;
+          load();
+        }});
+      }
+      return;
+    }
+    alert('删除失败：' + (err.message || '未知错误'));
+  }
 }
 
 function getBatchById(id) { return batches.find(b => b.id === id); }
@@ -1135,6 +1256,7 @@ function initDataSync() {
       case 'tasks':
       case 'scoringRules':
       case 'importBatches':
+      case 'views':
         needsReload = true;
         break;
     }
@@ -1151,7 +1273,8 @@ function initDataSync() {
 function showSyncNotification(event) {
   const labels = {
     items: '墨锭', batches: '批次', templates: '方案模板',
-    tasks: '任务', scoringRules: '评分规则', importBatches: '导入批次'
+    tasks: '任务', scoringRules: '评分规则', importBatches: '导入批次',
+    views: '常用视图'
   };
   const actionLabels = { created: '新增', updated: '更新', deleted: '删除', batch_updated: '批量更新' };
   const name = labels[event.collection] || event.collection;
@@ -1166,19 +1289,21 @@ function showSyncNotification(event) {
 }
 
 async function load() {
-  [items, batches, templates, storageKanban, tasks, todayTasksData, scoringData] = await Promise.all([
+  [items, batches, templates, storageKanban, tasks, todayTasksData, scoringData, views] = await Promise.all([
     api('/api/items'),
     api('/api/batches'),
     api('/api/templates'),
     api('/api/storage'),
     api('/api/tasks'),
     api('/api/tasks/today'),
-    api('/api/scoring-rules')
+    api('/api/scoring-rules'),
+    api('/api/views')
   ]);
   scoringRules = scoringData.rules || [];
   scoringCoverage = scoringData.coverage || null;
   scoringStatuses = scoringData.statuses || [];
   renderForms();
+  renderViews();
   render();
   const defaultTpl = templates.find(t => t.isDefault);
   if (defaultTpl && templateSelect.value === defaultTpl.id) {
@@ -1486,13 +1611,16 @@ taskFilterReset.onclick = () => {
   renderTasks();
 };
 document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => switchTab(tab.dataset.tab));
-statusFilter.onchange = render;
-batchFilter.onchange = render;
-document.querySelector('#search').oninput = render;
+statusFilter.onchange = () => { currentViewId = null; renderViews(); render(); };
+batchFilter.onchange = () => { currentViewId = null; renderViews(); render(); };
+document.querySelector('#search').oninput = () => { currentViewId = null; renderViews(); render(); };
 storageStatusFilter.onchange = renderStorageDetail;
 storageSearch.oninput = renderStorageDetail;
 backToKanban.onclick = showKanbanView;
 document.querySelector('#reload').onclick = load;
+
+const saveViewBtn = document.querySelector('#saveViewBtn');
+if (saveViewBtn) saveViewBtn.onclick = saveCurrentAsView;
 
 const compareBtn = document.querySelector('#compareBtn');
 if (compareBtn) {

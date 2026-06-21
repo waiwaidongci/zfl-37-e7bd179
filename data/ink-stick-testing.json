@@ -2123,5 +2123,55 @@
       "_updatedBy": "系统迁移"
     }
   ],
-  "tasks": []
+  "tasks": [],
+  "views": [
+    {
+      "id": "VIEW-DEFAULT-ALL",
+      "name": "全部墨锭",
+      "filters": {
+        "status": "",
+        "batchId": "",
+        "keyword": ""
+      },
+      "order": 0,
+      "isSystem": true,
+      "_version": 1,
+      "_createdAt": "2026-06-21T14:53:55.672Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T14:53:55.672Z",
+      "_updatedBy": "系统迁移"
+    },
+    {
+      "id": "VIEW-DEFAULT-PENDING",
+      "name": "待试磨清单",
+      "filters": {
+        "status": "待试磨",
+        "batchId": "",
+        "keyword": ""
+      },
+      "order": 1,
+      "isSystem": true,
+      "_version": 1,
+      "_createdAt": "2026-06-21T14:53:55.672Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T14:53:55.672Z",
+      "_updatedBy": "系统迁移"
+    },
+    {
+      "id": "VIEW-DEFAULT-WATCHING",
+      "name": "重点观察",
+      "filters": {
+        "status": "重点观察",
+        "batchId": "",
+        "keyword": ""
+      },
+      "order": 2,
+      "isSystem": true,
+      "_version": 1,
+      "_createdAt": "2026-06-21T14:53:55.672Z",
+      "_createdBy": "系统迁移",
+      "_updatedAt": "2026-06-21T14:53:55.672Z",
+      "_updatedBy": "系统迁移"
+    }
+  ]
 }

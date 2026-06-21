@@ -4,7 +4,8 @@ export const COLLLECTIONS = {
   TEMPLATES: "templates",
   TASKS: "tasks",
   IMPORT_BATCHES: "importBatches",
-  SCORING_RULES: "scoringRules"
+  SCORING_RULES: "scoringRules",
+  VIEWS: "views"
 };
 
 export const COLLECTION_FIELDS = {

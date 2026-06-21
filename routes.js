@@ -1,4 +1,4 @@
-import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions, prepareNewRecord, updateRecordWithVersion, findInCollection, saveAndNotify, CHANGE_TYPES } from "./db.js";
+import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions, prepareNewRecord, updateRecordWithVersion, findInCollection, saveAndNotify, CHANGE_TYPES, newViewId } from "./db.js";
 import { analyzeCSV, buildImportItems } from "./csvImporter.js";
 import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId, collectStatuses } from "./scoringRules.js";
 import { detectConflict, resolveConflict, detectDeleteConflict } from "./conflictDetection.js";
@@ -1405,4 +1405,117 @@ export async function getLifecycleStates(req, res) {
     states: LIFECYCLE_STATE_LIST,
     actions: getAllActions()
   });
+}
+
+export async function getViews(req, res) {
+  const db = await loadDb();
+  const views = (db.views || [])
+    .slice()
+    .sort((a, b) => {
+      if (a.order !== undefined && b.order !== undefined) return a.order - b.order;
+      return (a._createdAt || "").localeCompare(b._createdAt || "");
+    })
+    .map(v => ({
+      id: v.id,
+      name: v.name,
+      filters: v.filters || { status: "", batchId: "", keyword: "" },
+      order: v.order,
+      isSystem: v.isSystem || false
+    }));
+  return send(res, 200, views);
+}
+
+export async function createView(req, res) {
+  const db = await loadDb();
+  const input = await body(req);
+  const name = (input.name || "").trim();
+  if (!name) return sendError(res, 400, "name_required", "视图名称不能为空");
+
+  const filters = {
+    status: input.filters?.status || "",
+    batchId: input.filters?.batchId || "",
+    keyword: input.filters?.keyword || ""
+  };
+
+  const maxOrder = (db.views || []).reduce((m, v) => Math.max(m, v.order || 0), -1);
+  const view = {
+    id: newViewId(),
+    name,
+    filters,
+    order: maxOrder + 1,
+    isSystem: false
+  };
+  prepareNewRecord(view, {
+    createdBy: input.createdBy || "未指定用户"
+  });
+  db.views ||= [];
+  db.views.push(view);
+  await saveAndNotify(db, COLLLECTIONS.VIEWS, CHANGE_TYPES.CREATED, view);
+  return sendCreated(res, {
+    id: view.id,
+    name: view.name,
+    filters: view.filters,
+    order: view.order,
+    isSystem: view.isSystem
+  });
+}
+
+export async function updateView(req, res, id) {
+  const db = await loadDb();
+  db.views ||= [];
+  const view = db.views.find(v => v.id === id);
+  if (!view) return sendError(res, 404, "view_not_found", "视图不存在");
+
+  const input = await body(req);
+  const result = handleUpdatesWithConflict(COLLLECTIONS.VIEWS, view, input, (updates) => {
+    if (updates.name !== undefined) {
+      const trimmed = (updates.name || "").trim();
+      if (!trimmed) throw new Error("视图名称不能为空");
+      view.name = trimmed;
+    }
+    if (updates.filters !== undefined) {
+      view.filters = {
+        status: updates.filters.status || "",
+        batchId: updates.filters.batchId || "",
+        keyword: updates.filters.keyword || ""
+      };
+    }
+    if (updates.order !== undefined) {
+      view.order = Number(updates.order);
+    }
+    updateRecordWithVersion(view, {}, { updatedBy: updates.createdBy || view._updatedBy });
+  });
+
+  if (!result.resolved && result.conflict) {
+    return sendConflict(res, result.conflict);
+  }
+
+  await saveAndNotify(db, COLLLECTIONS.VIEWS, CHANGE_TYPES.UPDATED, view);
+  return sendOk(res, {
+    id: view.id,
+    name: view.name,
+    filters: view.filters,
+    order: view.order,
+    isSystem: view.isSystem
+  });
+}
+
+export async function deleteView(req, res, id) {
+  const db = await loadDb();
+  db.views ||= [];
+  const idx = db.views.findIndex(v => v.id === id);
+  if (idx === -1) return sendError(res, 404, "view_not_found", "视图不存在");
+  const view = db.views[idx];
+
+  if (view.isSystem) return sendError(res, 400, "view_is_system", "系统预设视图不能删除");
+
+  const input = await body(req);
+  const deleteCheck = handleDeleteWithConflict(COLLLECTIONS.VIEWS, view, input);
+  if (!deleteCheck.resolved) {
+    return sendConflict(res, deleteCheck.conflict);
+  }
+
+  const deleted = db.views.splice(idx, 1)[0];
+  await saveAndNotify(db, COLLLECTIONS.VIEWS, CHANGE_TYPES.DELETED, deleted);
+  return sendOk(res, { success: true });
 }

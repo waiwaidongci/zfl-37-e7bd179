@@ -183,6 +183,15 @@ export function page() {
       <div id="view-items">
         <div class="home-todo-alert" id="homeTodoAlert" style="display:none"></div>
         <div class="stats" id="stats"></div>
+        <div id="viewsBar" class="views-bar">
+          <div class="views-bar-header">
+            <strong>常用视图</strong>
+            <div style="display:flex;gap:6px;align-items:center">
+              <button class="secondary gold" id="saveViewBtn" style="padding:6px 10px;font-size:12px">💾 保存当前筛选</button>
+            </div>
+          </div>
+          <div class="views-list" id="viewsList"></div>
+        </div>
         <div class="toolbar">
           <select id="statusFilter"><option value="">全部状态</option></select>
           <select id="batchFilter"><option value="">全部批次</option></select>

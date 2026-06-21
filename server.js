@@ -13,6 +13,7 @@ import {
   previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch,
   getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch,
   getItemLifecycle, transitionLifecycle, getLifecycleStates,
+  getViews, createView, updateView, deleteView,
   streamEvents
 } from "./routes.js";
 
@@ -144,6 +145,13 @@ const server = http.createServer(async (req, res) => {
     const lifecycleItem = url.pathname.match(/^\/api\/items\/([^/]+)\/lifecycle$/);
     if (lifecycleItem && req.method === "GET") return getItemLifecycle(req, res, lifecycleItem[1]);
     if (lifecycleItem && req.method === "POST") return transitionLifecycle(req, res, lifecycleItem[1]);
+
+    if (req.method === "GET" && url.pathname === "/api/views") return getViews(req, res);
+    if (req.method === "POST" && url.pathname === "/api/views") return createView(req, res);
+
+    const viewId = url.pathname.match(/^\/api\/views\/([^/]+)$/);
+    if (viewId && req.method === "PATCH") return updateView(req, res, viewId[1]);
+    if (viewId && req.method === "DELETE") return deleteView(req, res, viewId[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {
