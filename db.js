@@ -237,54 +237,40 @@ function buildMigratedLifecycleHistory(item) {
   const history = [];
   const logs = item.logs || [];
   const tests = item.tests || [];
-  if (logs.length > 0) {
-    history.push({
-      from: "建档",
-      to: item.storage && item.storage.trim() ? "入库" : "建档",
-      action: item.storage && item.storage.trim() ? "store" : "create",
-      label: item.storage && item.storage.trim() ? "入库" : "建档",
-      at: logs[0].at
-    });
-  }
-  if (item.storage && item.storage.trim() && history.length === 0) {
-    history.push({
-      from: "建档",
-      to: "入库",
-      action: "store",
-      label: "入库",
-      at: item._createdAt || new Date().toISOString()
-    });
+  const currentState = inferLifecycleState(item);
+  if (logs.length > 0 || item.storage || item._createdAt) {
+    const createdTime = (logs.length > 0 && logs[0].at) || item._createdAt || new Date().toISOString();
+    if (item.storage && item.storage.trim()) {
+      history.push({
+        from: "建档",
+        to: "入库",
+        action: "store",
+        label: "入库",
+        at: createdTime
+      });
+    }
   }
   if (tests.length > 0) {
-    const currentState = item.lifecycleState || inferLifecycleState(item);
+    const firstTestTime = tests[0].at;
+    const fromState = history.find(h => h.to === "入库") ? "入库" : "建档";
+    const intermediateStates = [];
     if (currentState === "已试磨" || currentState === "重点观察" || currentState === "复测" || currentState === "归档") {
-      const storeEntry = history.find(h => h.to === "入库");
-      history.push({
-        from: storeEntry ? "入库" : "建档",
-        to: "试磨中",
-        action: "test",
-        label: "试磨",
-        at: tests[0].at
-      });
+      intermediateStates.push({ from: fromState, to: "已试磨", action: "test", label: "试磨", at: firstTestTime });
     }
     if (currentState === "重点观察" || currentState === "复测") {
-      history.push({
-        from: "已试磨",
-        to: currentState === "复测" ? "复测" : "重点观察",
-        action: currentState === "复测" ? "retest" : "markWatching",
-        label: currentState === "复测" ? "创建复测" : "标记重点观察",
-        at: tests.length > 1 ? tests[tests.length - 1].at : tests[0].at
-      });
+      const watchTime = tests.length > 1 ? tests[tests.length - 1].at : firstTestTime;
+      if (currentState === "重点观察") {
+        intermediateStates.push({ from: "已试磨", to: "重点观察", action: "markWatching", label: "标记重点观察", at: watchTime });
+      } else {
+        intermediateStates.push({ from: "已试磨", to: "重点观察", action: "markWatching", label: "标记重点观察", at: firstTestTime });
+        intermediateStates.push({ from: "重点观察", to: "复测", action: "retest", label: "创建复测", at: watchTime });
+      }
     }
     if (currentState === "归档") {
-      history.push({
-        from: "已试磨",
-        to: "归档",
-        action: "archive",
-        label: "归档",
-        at: tests[tests.length - 1].at
-      });
+      const archiveTime = tests.length > 1 ? tests[tests.length - 1].at : firstTestTime;
+      intermediateStates.push({ from: "已试磨", to: "归档", action: "archive", label: "归档", at: archiveTime });
     }
+    for (const s of intermediateStates) history.push(s);
   }
   return history;
 }

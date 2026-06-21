@@ -7,7 +7,8 @@ import {
   inferLifecycleState,
   lifecycleToStatus,
   buildTimeline,
-  getAllActions
+  getAllActions,
+  autoTransitionAfterTest
 } from "./lifecycle.js";
 
 let passed = 0;
@@ -301,6 +302,96 @@ test("重点观察 cannot archive without tests", () => {
   const archiveT = transitions.find(t => t.action === "archive");
   assertTrue(archiveT !== undefined);
   assertEq(archiveT.allowed, false);
+});
+
+test("autoTransitionAfterTest - 建档 with storage returns store", () => {
+  const item = makeItem({ lifecycleState: "建档", storage: "恒湿柜A" });
+  assertEq(autoTransitionAfterTest(item, 90), "store");
+});
+
+test("autoTransitionAfterTest - 建档 without storage returns null", () => {
+  const item = makeItem({ lifecycleState: "建档" });
+  assertEq(autoTransitionAfterTest(item, 90), null);
+});
+
+test("autoTransitionAfterTest - 入库 score>=85 returns test", () => {
+  const item = makeItem({ lifecycleState: "入库", storage: "恒湿柜A", tests: [{ score: 0 }] });
+  assertEq(autoTransitionAfterTest(item, 90), "test");
+});
+
+test("autoTransitionAfterTest - 入库 70<=score<85 returns markWatching", () => {
+  const item = makeItem({ lifecycleState: "入库", storage: "恒湿柜A", tests: [{ score: 0 }] });
+  assertEq(autoTransitionAfterTest(item, 79), "markWatching");
+});
+
+test("autoTransitionAfterTest - 入库 score<70 returns retest", () => {
+  const item = makeItem({ lifecycleState: "入库", storage: "恒湿柜A", tests: [{ score: 0 }] });
+  assertEq(autoTransitionAfterTest(item, 60), "retest");
+});
+
+test("autoTransitionAfterTest - 复测 score>=85 returns passRetest", () => {
+  const item = makeItem({ lifecycleState: "复测", tests: [{ score: 60 }] });
+  assertEq(autoTransitionAfterTest(item, 90), "passRetest");
+});
+
+test("autoTransitionAfterTest - 复测 score<85 returns failRetest", () => {
+  const item = makeItem({ lifecycleState: "复测", tests: [{ score: 60 }] });
+  assertEq(autoTransitionAfterTest(item, 70), "failRetest");
+});
+
+test("autoTransitionAfterTest - 已试磨 70<=score<85 returns markWatching", () => {
+  const item = makeItem({ lifecycleState: "已试磨", tests: [{ score: 90 }] });
+  assertEq(autoTransitionAfterTest(item, 79), "markWatching");
+});
+
+test("autoTransitionAfterTest - 已试磨 score<70 returns retest", () => {
+  const item = makeItem({ lifecycleState: "已试磨", tests: [{ score: 90 }] });
+  assertEq(autoTransitionAfterTest(item, 60), "retest");
+});
+
+test("autoTransitionAfterTest - 已试磨 score>=85 returns null", () => {
+  const item = makeItem({ lifecycleState: "已试磨", tests: [{ score: 90 }] });
+  assertEq(autoTransitionAfterTest(item, 95), null);
+});
+
+test("autoTransitionAfterTest - 归档 returns null", () => {
+  const item = makeItem({ lifecycleState: "归档", tests: [{ score: 90 }] });
+  assertEq(autoTransitionAfterTest(item, 90), null);
+});
+
+test("canTransition - STORED->RETEST requires test record", () => {
+  const item = makeItem({ lifecycleState: "入库", storage: "恒湿柜A" });
+  const result = canTransition(item, "retest");
+  assertEq(result.allowed, false);
+  assertTrue(result.reason.includes("试磨记录"));
+});
+
+test("canTransition - STORED->RETEST with test record", () => {
+  const item = makeItem({ lifecycleState: "入库", storage: "恒湿柜A", tests: [{ score: 60 }] });
+  const result = canTransition(item, "retest");
+  assertEq(result.allowed, true);
+});
+
+test("canTransition - TESTED->RETEST always allowed", () => {
+  const item = makeItem({ lifecycleState: "已试磨", tests: [{ score: 90 }] });
+  const result = canTransition(item, "retest");
+  assertEq(result.allowed, true);
+});
+
+test("executeTransition - STORED->RETEST path", () => {
+  const item = makeItem({ lifecycleState: "入库", storage: "恒湿柜A", tests: [{ score: 60 }] });
+  const r = executeTransition(item, "retest");
+  assertEq(r.success, true);
+  assertEq(r.newState, "复测");
+  assertEq(item.lifecycleState, "复测");
+});
+
+test("executeTransition - TESTED->RETEST path", () => {
+  const item = makeItem({ lifecycleState: "已试磨", tests: [{ score: 90 }] });
+  const r = executeTransition(item, "retest");
+  assertEq(r.success, true);
+  assertEq(r.newState, "复测");
+  assertEq(item.lifecycleState, "复测");
 });
 
 console.log("\n生命周期状态机测试结果：" + passed + " passed, " + failed + " failed");

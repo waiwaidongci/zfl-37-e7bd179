@@ -54,10 +54,31 @@ const TRANSITIONS = [
     }
   },
   {
+    from: LIFECYCLE_STATES.STORED,
+    to: LIFECYCLE_STATES.RETEST,
+    action: "retest",
+    label: "创建复测",
+    validate(item) {
+      if (!item.tests || item.tests.length === 0) {
+        return { allowed: false, reason: "未建试磨记录，无法创建复测" };
+      }
+      return { allowed: true };
+    }
+  },
+  {
     from: LIFECYCLE_STATES.TESTED,
     to: LIFECYCLE_STATES.WATCHING,
     action: "markWatching",
     label: "标记重点观察",
+    validate() {
+      return { allowed: true };
+    }
+  },
+  {
+    from: LIFECYCLE_STATES.TESTED,
+    to: LIFECYCLE_STATES.RETEST,
+    action: "retest",
+    label: "创建复测",
     validate() {
       return { allowed: true };
     }
@@ -263,4 +284,47 @@ export function getAllActions() {
     }
   }
   return Object.values(actions);
+}
+
+export function autoTransitionAfterTest(item, score) {
+  const current = item.lifecycleState || inferLifecycleState(item);
+  const numericScore = Number(score) || 0;
+  if (current === LIFECYCLE_STATES.CREATED) {
+    if (item.storage && item.storage.trim()) {
+      return "store";
+    }
+    return null;
+  }
+  if (current === LIFECYCLE_STATES.STORED) {
+    if (numericScore >= 85) {
+      return "test";
+    }
+    if (numericScore >= 70) {
+      return "markWatching";
+    }
+    if (numericScore >= 0) {
+      return "retest";
+    }
+    return null;
+  }
+  if (current === LIFECYCLE_STATES.RETEST) {
+    if (numericScore >= 85) {
+      return "passRetest";
+    }
+    return "failRetest";
+  }
+  if (current === LIFECYCLE_STATES.TESTED) {
+    if (numericScore >= 70 && numericScore < 85) {
+      return "markWatching";
+    }
+    if (numericScore < 70) {
+      return "retest";
+    }
+  }
+  if (current === LIFECYCLE_STATES.WATCHING) {
+    if (numericScore >= 85) {
+      return "retest";
+    }
+  }
+  return null;
 }

@@ -4,7 +4,7 @@ import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoring
 import { detectConflict, resolveConflict, detectDeleteConflict } from "./conflictDetection.js";
 import { onDataChange } from "./syncEvents.js";
 import { COLLLECTIONS } from "./dataLayer.js";
-import { executeTransition, getAvailableTransitions, canTransition, buildTimeline, lifecycleToStatus, LIFECYCLE_STATE_LIST, getAllActions } from "./lifecycle.js";
+import { executeTransition, getAvailableTransitions, canTransition, buildTimeline, lifecycleToStatus, LIFECYCLE_STATE_LIST, getAllActions, autoTransitionAfterTest } from "./lifecycle.js";
 
 export async function body(req) {
   const chunks = [];
@@ -115,11 +115,17 @@ export async function getItems(req, res) {
 export async function createItem(req, res) {
   const db = await loadDb();
   const input = await body(req);
+  const initialLifecycle = input.storage && input.storage.trim() ? "入库" : "建档";
+  const createAt = new Date().toISOString();
   const item = {
     id: newItemId(),
     status: input.status || "待试磨",
     ...input,
-    logs: [{ at: new Date().toISOString(), step: "建档", note: "创建墨锭" + (input.batchId ? "，归入批次" : "") }]
+    lifecycleState: initialLifecycle,
+    lifecycleHistory: input.storage && input.storage.trim()
+      ? [{ from: "建档", to: "入库", action: "store", label: "入库", at: createAt }]
+      : [],
+    logs: [{ at: createAt, step: "建档", note: "创建墨锭" + (input.batchId ? "，归入批次" : "") + (input.storage ? "，存放至" + input.storage : "") }]
   };
   migrateItemToVersions(item);
   const initialVersion = item.versions[0];
@@ -152,6 +158,21 @@ export async function patchItem(req, res, id) {
     }
     if (updates.storage !== undefined && updates.storage !== oldStorage) {
       item.logs.push({ at: new Date().toISOString(), step: "存放位置", note: "从 " + (oldStorage || "未指定") + " 移至 " + (item.storage || "未指定") });
+      const current = item.lifecycleState || inferLifecycleState(item);
+      if (current === "建档" && item.storage && item.storage.trim()) {
+        const canDo = canTransition(item, "store");
+        if (canDo.allowed) {
+          const lt = executeTransition(item, "store");
+          if (lt.success) {
+            item.status = lifecycleToStatus(item.lifecycleState);
+            item.logs.push({
+              at: new Date().toISOString(),
+              step: "生命周期",
+              note: `${lt.previousState} → ${lt.newState}（设置存放位置触发）`
+            });
+          }
+        }
+      }
     }
     createVersion(item, {
       createdBy: updates.createdBy || "未指定用户",
@@ -242,7 +263,21 @@ export async function addAction(req, res, id) {
     if (ruleMatch) {
       noteParts.push("命中规则：" + ruleMatch.ruleName);
     }
-    const logEntry = { at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score };
+
+    const autoAction = autoTransitionAfterTest(item, score);
+    let lifecycleNote = "";
+    if (autoAction) {
+      const canDo = canTransition(item, autoAction);
+      if (canDo.allowed) {
+        const lt = executeTransition(item, autoAction);
+        if (lt.success) {
+          item.status = lifecycleToStatus(item.lifecycleState);
+          lifecycleNote = `（生命周期：${lt.previousState} → ${lt.newState}）`;
+        }
+      }
+    }
+
+    const logEntry = { at: new Date().toISOString(), step: "试磨", note: noteParts.join("，") + lifecycleNote, score };
     if (ruleMatch) {
       logEntry.ruleId = ruleMatch.ruleId;
       logEntry.ruleName = ruleMatch.ruleName;
@@ -259,7 +294,7 @@ export async function addAction(req, res, id) {
 
     createVersion(item, {
       createdBy: updates.createdBy || "未指定用户",
-      reason: updates.reason || ("创建试磨记录，评分" + score),
+      reason: updates.reason || ("创建试磨记录，评分" + score + lifecycleNote),
       action: "revise"
     });
     updateRecordWithVersion(item, {}, { updatedBy: updates.createdBy || item._updatedBy });
@@ -487,9 +522,46 @@ export async function createTask(req, res) {
     createdBy: input.createdBy || "未指定用户"
   });
 
+  let lifecycleTransitioned = false;
+  const itemResult = handleUpdatesWithConflict(COLLLECTIONS.ITEMS, item, input, (updates) => {
+    const current = item.lifecycleState || inferLifecycleState(item);
+    if (current === "重点观察" || current === "已试磨" || current === "入库") {
+      const canDo = canTransition(item, "retest");
+      if (canDo.allowed) {
+        const lt = executeTransition(item, "retest");
+        if (lt.success) {
+          item.status = lifecycleToStatus(item.lifecycleState);
+          item.logs ||= [];
+          item.logs.push({
+            at: new Date().toISOString(),
+            step: "生命周期",
+            note: `${lt.previousState} → ${lt.newState}（创建复测任务触发）`
+          });
+          lifecycleTransitioned = true;
+        }
+      }
+    }
+    updateRecordWithVersion(item, {}, { updatedBy: updates.createdBy || item._updatedBy });
+  });
+
+  if (!itemResult.resolved && itemResult.conflict) {
+    return sendConflict(res, itemResult.conflict);
+  }
+
+  if (lifecycleTransitioned) {
+    createVersion(item, {
+      createdBy: input.createdBy || "未指定用户",
+      reason: "创建复测任务，触发生命周期状态变更",
+      action: "revise"
+    });
+  }
+
   db.tasks ||= [];
   db.tasks.unshift(task);
   await saveAndNotify(db, COLLLECTIONS.TASKS, CHANGE_TYPES.CREATED, task);
+  if (lifecycleTransitioned) {
+    await saveAndNotify(db, COLLLECTIONS.ITEMS, CHANGE_TYPES.UPDATED, item);
+  }
 
   return sendCreated(res, enrichTask(task, db.items));
 }
@@ -577,6 +649,20 @@ export async function completeTask(req, res, id) {
         item.logs ||= [];
         item.logs.push({ at: new Date().toISOString(), step: "规则", note: warnNote, score });
       }
+
+      const autoAction = autoTransitionAfterTest(item, score);
+      let lifecycleNote = "";
+      if (autoAction) {
+        const canDo = canTransition(item, autoAction);
+        if (canDo.allowed) {
+          const lt = executeTransition(item, autoAction);
+          if (lt.success) {
+            item.status = lifecycleToStatus(item.lifecycleState);
+            lifecycleNote = `（生命周期：${lt.previousState} → ${lt.newState}）`;
+          }
+        }
+      }
+
       item.logs ||= [];
       const noteParts = [];
       if (updates.paper) noteParts.push(updates.paper);
@@ -586,7 +672,7 @@ export async function completeTask(req, res, id) {
       if (ruleMatch) {
         noteParts.push("命中规则：" + ruleMatch.ruleName);
       }
-      const logEntry = { at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score };
+      const logEntry = { at: new Date().toISOString(), step: "试磨", note: noteParts.join("，") + lifecycleNote, score };
       if (ruleMatch) {
         logEntry.ruleId = ruleMatch.ruleId;
         logEntry.ruleName = ruleMatch.ruleName;
@@ -594,7 +680,7 @@ export async function completeTask(req, res, id) {
       item.logs.push(logEntry);
       createVersion(item, {
         createdBy: updates.createdBy || "未指定用户",
-        reason: updates.reason || ("任务完成并录入试磨记录，评分" + score),
+        reason: updates.reason || ("任务完成并录入试磨记录，评分" + score + lifecycleNote),
         action: "revise"
       });
     } else {
@@ -829,6 +915,22 @@ export async function createRevision(req, res, id) {
           item.logs ||= [];
           const warnNote = "评分" + score + "未匹配规则，状态保持" + item.status;
           item.logs.push({ at: new Date().toISOString(), step: "规则", note: warnNote, score });
+        }
+        const autoAction = autoTransitionAfterTest(item, score);
+        if (autoAction) {
+          const canDo = canTransition(item, autoAction);
+          if (canDo.allowed) {
+            const lt = executeTransition(item, autoAction);
+            if (lt.success) {
+              item.status = lifecycleToStatus(item.lifecycleState);
+              item.logs ||= [];
+              item.logs.push({
+                at: new Date().toISOString(),
+                step: "生命周期",
+                note: `${lt.previousState} → ${lt.newState}`
+              });
+            }
+          }
         }
       }
       changed = true;
