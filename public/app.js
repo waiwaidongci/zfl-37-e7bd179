@@ -300,7 +300,13 @@ function render() {
   itemSelect.innerHTML = items.map(item => '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.name || item.shipType || item.source || item.plateSize || item.smokeSource || '')+'</option>').join('');
   templateSelect.innerHTML = '<option value="">-- 手动填写 --</option>' + templates.map(t => '<option value="'+t.id+'" '+(t.isDefault?'selected':'')+'>'+t.name+(t.isDefault?' (默认)':'')+'</option>').join('');
 
-  const stats = Object.fromEntries(stages.map(s => [s, items.filter(i => i.status === s).length]));
+  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
+  const stats = Object.fromEntries(stagesDynamic.map(s => [s, 0]));
+  for (const item of items) {
+    const status = item.status || '未指定';
+    if (stats[status] === undefined) stats[status] = 0;
+    stats[status] += 1;
+  }
   statsEl.innerHTML = Object.entries(stats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
 
   const batchStats = { '批次总数': batches.length, '墨锭总数': items.length, '已完成批次': batches.filter(b => { const it = items.filter(i => i.batchId === b.id); return it.length > 0 && it.every(i => i.status === '已试磨'); }).length };
