@@ -10,7 +10,8 @@ import {
   getStorageKanban, getItemsByStorage,
   getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
   getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions,
-  previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch
+  previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch,
+  getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -124,6 +125,15 @@ const server = http.createServer(async (req, res) => {
 
     const importBatchDetail = url.pathname.match(/^\/api\/import\/batches\/([^/]+)$/);
     if (importBatchDetail && req.method === "GET") return getImportBatch(req, res, importBatchDetail[1]);
+
+    if (req.method === "GET" && url.pathname === "/api/scoring-rules") return getScoringRules(req, res);
+    if (req.method === "POST" && url.pathname === "/api/scoring-rules") return createScoringRule(req, res);
+    if (req.method === "POST" && url.pathname === "/api/scoring-rules/reorder") return reorderScoringRules(req, res);
+    if (req.method === "GET" && url.pathname === "/api/scoring-rules/preview") return previewRuleMatch(req, res);
+
+    const scoringRuleId = url.pathname.match(/^\/api\/scoring-rules\/([^/]+)$/);
+    if (scoringRuleId && req.method === "PATCH") return updateScoringRule(req, res, scoringRuleId[1]);
+    if (scoringRuleId && req.method === "DELETE") return deleteScoringRule(req, res, scoringRuleId[1]);
 
     send(res, 404, { error: "not_found" });
   } catch (error) {

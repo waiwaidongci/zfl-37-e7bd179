@@ -26,6 +26,7 @@ export function page() {
         <div class="tab" data-tab="batches">批次管理</div>
         <div class="tab" data-tab="storage">存放位置看板</div>
         <div class="tab" data-tab="templates">试磨方案模板</div>
+        <div class="tab" data-tab="scoring">评分规则配置</div>
       </div>
       <div id="tab-items">
         <form id="createForm">
@@ -83,6 +84,45 @@ export function page() {
           </label>
           <button>保存模板</button>
         </form>
+      </div>
+      <div id="tab-scoring" style="display:none">
+        <form id="scoringRuleForm">
+          <h2>新增评分规则</h2>
+          <label>规则名称</label>
+          <input name="name" id="srName" placeholder="例如：优秀（已试磨）" required>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+            <div>
+              <label>最低分（含）</label>
+              <input name="minScore" id="srMinScore" type="number" min="0" max="100" required>
+            </div>
+            <div>
+              <label>最高分（含）</label>
+              <input name="maxScore" id="srMaxScore" type="number" min="0" max="100" required>
+            </div>
+          </div>
+          <label>状态结果</label>
+          <select name="resultStatus" id="srResultStatus">
+            <option value="待试磨">待试磨</option>
+            <option value="已试磨">已试磨</option>
+            <option value="重点观察">重点观察</option>
+          </select>
+          <label>提示文案</label>
+          <textarea name="hintText" id="srHintText" placeholder="例如：试磨评分优秀，可正式使用"></textarea>
+          <label>优先级（数字越小越先匹配）</label>
+          <input name="order" id="srOrder" type="number" min="0" value="0">
+          <button>保存规则</button>
+        </form>
+        <div class="panel" style="margin-top:14px">
+          <h3 style="margin:0 0 8px;font-size:15px">规则预览测试</h3>
+          <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px">
+              <label>输入测试分数</label>
+              <input type="number" id="srTestScore" min="0" max="100" placeholder="0-100">
+            </div>
+            <button type="button" class="secondary" id="srTestBtn">测试匹配</button>
+          </div>
+          <div id="srTestResult" class="meta" style="margin-top:8px"></div>
+        </div>
       </div>
       <div id="tab-tasks" style="display:none">
         <form id="taskForm">
@@ -195,6 +235,22 @@ export function page() {
           </div>
           <div id="taskList" class="task-list"></div>
           <div id="taskEmpty" class="empty" style="display:none">暂无任务数据，请在左侧创建试磨任务。</div>
+        </div>
+      </div>
+      <div id="view-scoring" style="display:none">
+        <div class="stats" id="scoringStats"></div>
+        <div class="panel">
+          <div class="section-title">
+            <h2>评分规则列表 — 按优先级排列，提交试磨记录时自动匹配</h2>
+          </div>
+          <div id="scoringCoverage" style="margin-bottom:14px;padding:10px 14px;background:#f8faf6;border:1px solid var(--line);border-radius:8px"></div>
+          <table id="scoringRuleTable">
+            <thead>
+              <tr><th>优先级</th><th>规则名称</th><th>分数区间</th><th>状态结果</th><th>提示文案</th><th>操作</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+          <div id="scoringEmpty" class="empty" style="display:none">暂无评分规则，请在左侧新增规则。</div>
         </div>
       </div>
     </section>

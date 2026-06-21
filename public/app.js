@@ -60,6 +60,8 @@ let tasks = [];
 let todayTasksData = null;
 let itemTaskCache = {};
 let selectedCompareIds = new Set();
+let scoringRules = [];
+let scoringCoverage = null;
 
 async function api(path, options) {
   const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
@@ -75,11 +77,13 @@ function switchTab(tab) {
   document.querySelector('#tab-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#tab-templates').style.display = tab === 'templates' ? '' : 'none';
   document.querySelector('#tab-tasks').style.display = tab === 'tasks' ? '' : 'none';
+  document.querySelector('#tab-scoring').style.display = tab === 'scoring' ? '' : 'none';
   document.querySelector('#view-items').style.display = tab === 'items' ? '' : 'none';
   document.querySelector('#view-batches').style.display = tab === 'batches' ? '' : 'none';
   document.querySelector('#view-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#view-templates').style.display = tab === 'templates' ? '' : 'none';
   document.querySelector('#view-tasks').style.display = tab === 'tasks' ? '' : 'none';
+  document.querySelector('#view-scoring').style.display = tab === 'scoring' ? '' : 'none';
   if (tab === 'storage') {
     showKanbanView();
   }
@@ -337,6 +341,89 @@ function render() {
     document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = async () => { if (confirm('确定删除此模板？')) { await api('/api/templates/'+btn.dataset.delete, { method:'DELETE' }); await load(); } });
   }
 
+  const scoringStatsEl = document.querySelector('#scoringStats');
+  const scoringRuleTable = document.querySelector('#scoringRuleTable tbody');
+  const scoringEmpty = document.querySelector('#scoringEmpty');
+  const scoringCoverageEl = document.querySelector('#scoringCoverage');
+  if (scoringStatsEl) {
+    const scStats = { '规则总数': scoringRules.length, '覆盖分数': scoringCoverage ? (scoringCoverage.coveragePercent + '%') : '0%' };
+    scoringStatsEl.innerHTML = Object.entries(scStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
+  }
+  if (scoringCoverageEl) {
+    if (scoringCoverage) {
+      let covHtml = '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">';
+      covHtml += '<div><strong>分数覆盖率：</strong>' + scoringCoverage.coveragePercent + '%（覆盖 ' + scoringCoverage.totalCoverage + '/101 个分值）</div>';
+      if (scoringCoverage.hasFullCoverage) {
+        covHtml += '<span class="pill done">覆盖完整</span>';
+      } else {
+        const gapDesc = scoringCoverage.gaps.map(([a, b]) => a === b ? a : (a + '-' + b)).join('、');
+        covHtml += '<span class="pill warn">存在空白区间：' + gapDesc + '</span>';
+      }
+      covHtml += '</div>';
+      scoringCoverageEl.innerHTML = covHtml;
+    }
+  }
+  if (scoringRuleTable) {
+    if (scoringRules.length === 0) {
+      scoringRuleTable.parentElement.style.display = 'none';
+      if (scoringEmpty) scoringEmpty.style.display = '';
+    } else {
+      scoringRuleTable.parentElement.style.display = '';
+      if (scoringEmpty) scoringEmpty.style.display = 'none';
+      scoringRuleTable.innerHTML = scoringRules.map((r, idx) => {
+        const statusCls = r.resultStatus === '已试磨' ? 'done' : r.resultStatus === '重点观察' ? 'watch' : 'pending';
+        return '<tr>' +
+          '<td style="white-space:nowrap">' +
+            '<button class="secondary" data-sr-up="'+r.id+'" '+(idx===0?'disabled style="opacity:0.5"':'')+'>↑</button> ' +
+            '<button class="secondary" data-sr-down="'+r.id+'" '+(idx===scoringRules.length-1?'disabled style="opacity:0.5"':'')+'>↓</button> ' +
+            '<strong>#'+(r.order ?? idx)+'</strong>' +
+          '</td>' +
+          '<td><strong>'+escapeHtml(r.name)+'</strong></td>' +
+          '<td><code>'+r.minScore+' - '+r.maxScore+'</code></td>' +
+          '<td><span class="pill '+statusCls+'">'+r.resultStatus+'</span></td>' +
+          '<td class="meta">'+escapeHtml(r.hintText || '-')+'</td>' +
+          '<td><div style="display:flex;gap:6px">' +
+            '<button class="secondary gold" data-sr-edit="'+r.id+'">编辑</button>' +
+            '<button class="secondary" style="background:var(--warn)" data-sr-delete="'+r.id+'">删除</button>' +
+          '</div></td>' +
+        '</tr>';
+      }).join('');
+      document.querySelectorAll('[data-sr-up]').forEach(btn => btn.onclick = async () => {
+        const id = btn.dataset.srUp;
+        const idx = scoringRules.findIndex(r => r.id === id);
+        if (idx <= 0) return;
+        const orders = {};
+        scoringRules.forEach((r, i) => {
+          if (i === idx - 1) orders[r.id] = idx;
+          else if (i === idx) orders[r.id] = idx - 1;
+          else orders[r.id] = r.order ?? i;
+        });
+        await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify({ orders }) });
+        await load();
+      });
+      document.querySelectorAll('[data-sr-down]').forEach(btn => btn.onclick = async () => {
+        const id = btn.dataset.srDown;
+        const idx = scoringRules.findIndex(r => r.id === id);
+        if (idx < 0 || idx >= scoringRules.length - 1) return;
+        const orders = {};
+        scoringRules.forEach((r, i) => {
+          if (i === idx + 1) orders[r.id] = idx;
+          else if (i === idx) orders[r.id] = idx + 1;
+          else orders[r.id] = r.order ?? i;
+        });
+        await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify({ orders }) });
+        await load();
+      });
+      document.querySelectorAll('[data-sr-edit]').forEach(btn => btn.onclick = () => openScoringRuleEditor(btn.dataset.srEdit));
+      document.querySelectorAll('[data-sr-delete]').forEach(btn => btn.onclick = async () => {
+        if (confirm('确定删除此评分规则？')) {
+          await api('/api/scoring-rules/'+btn.dataset.srDelete, { method:'DELETE' });
+          await load();
+        }
+      });
+    }
+  }
+
   renderStorageKanban();
   if (currentStorage) {
     renderStorageDetail();
@@ -534,14 +621,17 @@ function bindTaskEvents() {
 }
 
 async function load() {
-  [items, batches, templates, storageKanban, tasks, todayTasksData] = await Promise.all([
+  [items, batches, templates, storageKanban, tasks, todayTasksData, scoringData] = await Promise.all([
     api('/api/items'),
     api('/api/batches'),
     api('/api/templates'),
     api('/api/storage'),
     api('/api/tasks'),
-    api('/api/tasks/today')
+    api('/api/tasks/today'),
+    api('/api/scoring-rules')
   ]);
+  scoringRules = scoringData.rules || [];
+  scoringCoverage = scoringData.coverage || null;
   render();
   const defaultTpl = templates.find(t => t.isDefault);
   if (defaultTpl && templateSelect.value === defaultTpl.id) {
@@ -582,6 +672,79 @@ templateSelect.onchange = () => {
     actionForm.reset();
   }
 };
+const scoringRuleForm = document.querySelector('#scoringRuleForm');
+let editingScoringRuleId = null;
+if (scoringRuleForm) {
+  scoringRuleForm.onsubmit = async event => {
+    event.preventDefault();
+    const fd = new FormData(scoringRuleForm);
+    const data = {
+      name: fd.get('name')?.toString() || '',
+      minScore: Number(fd.get('minScore')),
+      maxScore: Number(fd.get('maxScore')),
+      resultStatus: fd.get('resultStatus')?.toString() || '',
+      hintText: fd.get('hintText')?.toString() || '',
+      order: Number(fd.get('order') || 0)
+    };
+    try {
+      if (editingScoringRuleId) {
+        await api('/api/scoring-rules/' + editingScoringRuleId, { method:'PATCH', body: JSON.stringify(data) });
+        editingScoringRuleId = null;
+        scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
+        scoringRuleForm.querySelector('button').textContent = '保存规则';
+      } else {
+        await api('/api/scoring-rules', { method:'POST', body: JSON.stringify(data) });
+      }
+      scoringRuleForm.reset();
+      document.querySelector('#srOrder').value = '0';
+      await load();
+    } catch(err) {
+      const msg = err && err.message ? err.message : '操作失败';
+      const detail = err && err.errors ? '\n' + err.errors.join('\n') : '';
+      alert(msg + detail);
+    }
+  };
+}
+const srTestBtn = document.querySelector('#srTestBtn');
+if (srTestBtn) {
+  srTestBtn.onclick = async () => {
+    const scoreInput = document.querySelector('#srTestScore');
+    const resultEl = document.querySelector('#srTestResult');
+    if (!scoreInput || !resultEl) return;
+    const score = Number(scoreInput.value);
+    if (isNaN(score) || score < 0 || score > 100) {
+      resultEl.innerHTML = '<span class="warn">请输入0-100之间的有效分数</span>';
+      return;
+    }
+    try {
+      const result = await api('/api/scoring-rules/preview?score=' + score);
+      if (result.match) {
+        resultEl.innerHTML = '分数 <strong>' + score + '</strong> 命中规则：<strong>' + escapeHtml(result.match.ruleName) + '</strong>（区间 ' + result.match.matchedRange + '）→ 状态：<span class="pill done">' + escapeHtml(result.match.resultStatus) + '</span>' + (result.match.hintText ? '<br><span class="meta">提示：' + escapeHtml(result.match.hintText) + '</span>' : '');
+      } else {
+        resultEl.innerHTML = '<span class="warn">分数 ' + score + ' 未匹配任何规则，将使用默认判断（≥85已试磨，否则重点观察）</span>';
+      }
+    } catch(err) {
+      resultEl.innerHTML = '<span class="warn">测试失败：' + escapeHtml(err.message || '未知错误') + '</span>';
+    }
+  };
+}
+function openScoringRuleEditor(id) {
+  const rule = scoringRules.find(r => r.id === id);
+  if (!rule) return;
+  editingScoringRuleId = id;
+  document.querySelector('#srName').value = rule.name || '';
+  document.querySelector('#srMinScore').value = rule.minScore;
+  document.querySelector('#srMaxScore').value = rule.maxScore;
+  document.querySelector('#srResultStatus').value = rule.resultStatus || '待试磨';
+  document.querySelector('#srHintText').value = rule.hintText || '';
+  document.querySelector('#srOrder').value = rule.order ?? 0;
+  const form = document.querySelector('#scoringRuleForm');
+  if (form) {
+    form.querySelector('h2').textContent = '编辑评分规则';
+    form.querySelector('button').textContent = '更新规则';
+    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+}
 taskForm.onsubmit = async event => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(taskForm).entries());

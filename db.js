@@ -2,6 +2,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { initScoringRules, newScoringRuleId } from "./scoringRules.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const dbPath = join(__dirname, "data", "ink-stick-testing.json");
@@ -94,6 +95,41 @@ const seed = {
       "speed": "慢",
       "isDefault": false
     }
+  ],
+  "scoringRules": [
+    {
+      "id": "SCR-DEFAULT-HIGH",
+      "name": "优秀（已试磨）",
+      "minScore": 85,
+      "maxScore": 100,
+      "resultStatus": "已试磨",
+      "hintText": "试磨评分优秀，可正式使用",
+      "order": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "SCR-DEFAULT-MID",
+      "name": "合格（重点观察）",
+      "minScore": 70,
+      "maxScore": 84,
+      "resultStatus": "重点观察",
+      "hintText": "试磨评分合格，需继续观察使用效果",
+      "order": 2,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "SCR-DEFAULT-LOW",
+      "name": "待改进（建议复测）",
+      "minScore": 0,
+      "maxScore": 69,
+      "resultStatus": "待试磨",
+      "hintText": "试磨评分偏低，建议调整参数后复测",
+      "order": 3,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
   ]
 };
 
@@ -121,6 +157,7 @@ export async function loadDb() {
   if (!db.items) { db.items = []; changed = true; }
   if (!db.templates) { db.templates = []; changed = true; }
   if (!db.tasks) { db.tasks = []; changed = true; }
+  if (initScoringRules(db)) { changed = true; }
   for (const item of db.items) { if (!item.id) { item.id = item.code || ("IS-" + Date.now() + Math.random().toString(36).slice(2,5)); changed = true; } }
   for (const tpl of db.templates) { if (!tpl.id) { tpl.id = newTemplateId(); changed = true; } if (tpl.isDefault === undefined) { tpl.isDefault = false; changed = true; } }
   for (const task of db.tasks) {

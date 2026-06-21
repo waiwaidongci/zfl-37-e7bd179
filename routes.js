@@ -1,5 +1,6 @@
 import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions } from "./db.js";
 import { analyzeCSV, buildImportItems } from "./csvImporter.js";
+import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId } from "./scoringRules.js";
 
 export async function body(req) {
   const chunks = [];
@@ -100,14 +101,32 @@ export async function addAction(req, res, id) {
   const score = Number(input.score || 0);
   item.tests ||= [];
   const testRecord = { at: new Date().toISOString(), ...input, score };
+  const ruleMatch = matchRule(score, db.scoringRules || []);
+  if (ruleMatch) {
+    testRecord.ruleId = ruleMatch.ruleId;
+    testRecord.ruleName = ruleMatch.ruleName;
+    testRecord.ruleHint = ruleMatch.hintText;
+  }
   item.tests.push(testRecord);
-  item.status = score >= 85 ? "已试磨" : "重点观察";
+  if (ruleMatch) {
+    item.status = ruleMatch.resultStatus;
+  } else {
+    item.status = score >= 85 ? "已试磨" : "重点观察";
+  }
   const noteParts = [];
   if (input.paper) noteParts.push(input.paper);
   if (input.water) noteParts.push(input.water);
   if (input.grindingTime) noteParts.push("研磨" + input.grindingTime);
   noteParts.push("评分" + score);
-  item.logs.push({ at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score });
+  if (ruleMatch) {
+    noteParts.push("命中规则：" + ruleMatch.ruleName);
+  }
+  const logEntry = { at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score };
+  if (ruleMatch) {
+    logEntry.ruleId = ruleMatch.ruleId;
+    logEntry.ruleName = ruleMatch.ruleName;
+  }
+  item.logs.push(logEntry);
 
   db.tasks ||= [];
   const pendingTask = db.tasks
@@ -350,6 +369,7 @@ export async function completeTask(req, res, id) {
   if (input.paper || input.score !== undefined) {
     const score = Number(input.score || 0);
     item.tests ||= [];
+    const ruleMatch = matchRule(score, db.scoringRules || []);
     const testRecord = {
       at: new Date().toISOString(),
       paper: input.paper || "",
@@ -359,17 +379,34 @@ export async function completeTask(req, res, id) {
       sediment: input.sediment || "",
       score
     };
+    if (ruleMatch) {
+      testRecord.ruleId = ruleMatch.ruleId;
+      testRecord.ruleName = ruleMatch.ruleName;
+      testRecord.ruleHint = ruleMatch.hintText;
+    }
     item.tests.push(testRecord);
     task.testRecordId = testRecord.at;
 
-    item.status = score >= 85 ? "已试磨" : "重点观察";
+    if (ruleMatch) {
+      item.status = ruleMatch.resultStatus;
+    } else {
+      item.status = score >= 85 ? "已试磨" : "重点观察";
+    }
     item.logs ||= [];
     const noteParts = [];
     if (input.paper) noteParts.push(input.paper);
     if (input.water) noteParts.push(input.water);
     if (input.grindingTime) noteParts.push("研磨" + input.grindingTime);
     noteParts.push("评分" + score);
-    item.logs.push({ at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score });
+    if (ruleMatch) {
+      noteParts.push("命中规则：" + ruleMatch.ruleName);
+    }
+    const logEntry = { at: new Date().toISOString(), step: "试磨", note: noteParts.join("，"), score };
+    if (ruleMatch) {
+      logEntry.ruleId = ruleMatch.ruleId;
+      logEntry.ruleName = ruleMatch.ruleName;
+    }
+    item.logs.push(logEntry);
     createVersion(item, {
       createdBy: input.createdBy || "未指定用户",
       reason: input.reason || ("任务完成并录入试磨记录，评分" + score),
@@ -546,14 +583,35 @@ export async function createRevision(req, res, id) {
   if (input.appendTest) {
     item.tests ||= [];
     const score = Number(input.appendTest.score || 0);
+    const ruleMatch = matchRule(score, db.scoringRules || []);
     const testRecord = {
       at: new Date().toISOString(),
       ...input.appendTest,
       score
     };
+    if (ruleMatch) {
+      testRecord.ruleId = ruleMatch.ruleId;
+      testRecord.ruleName = ruleMatch.ruleName;
+      testRecord.ruleHint = ruleMatch.hintText;
+    }
     item.tests.push(testRecord);
     if (score > 0) {
-      item.status = score >= 85 ? "已试磨" : "重点观察";
+      if (ruleMatch) {
+        item.status = ruleMatch.resultStatus;
+      } else {
+        item.status = score >= 85 ? "已试磨" : "重点观察";
+      }
+      if (ruleMatch && input.appendLog === undefined) {
+        item.logs ||= [];
+        item.logs.push({
+          at: new Date().toISOString(),
+          step: "试磨",
+          note: "评分" + score + "，命中规则：" + ruleMatch.ruleName,
+          score,
+          ruleId: ruleMatch.ruleId,
+          ruleName: ruleMatch.ruleName
+        });
+      }
     }
     changed = true;
   }
@@ -787,4 +845,97 @@ export async function getImportBatch(req, res, id) {
     ...batch,
     items: batchItems.map(summarize)
   });
+}
+
+export async function getScoringRules(req, res) {
+  const db = await loadDb();
+  const rules = getSortedRules(db.scoringRules || []);
+  const coverage = getCoverageSummary(db.scoringRules || []);
+  return send(res, 200, { rules, coverage });
+}
+
+export async function createScoringRule(req, res) {
+  const db = await loadDb();
+  const input = await body(req);
+  const rule = {
+    id: newScoringRuleId(),
+    name: input.name || "",
+    minScore: Number(input.minScore),
+    maxScore: Number(input.maxScore),
+    resultStatus: input.resultStatus || "",
+    hintText: input.hintText || "",
+    order: Number(input.order) || 0,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  const errors = validateRule(rule, db.scoringRules || []);
+  if (errors.length > 0) {
+    return send(res, 400, { error: "validation_failed", errors });
+  }
+  db.scoringRules ||= [];
+  db.scoringRules.push(rule);
+  await saveDb(db);
+  return send(res, 201, rule);
+}
+
+export async function updateScoringRule(req, res, id) {
+  const db = await loadDb();
+  db.scoringRules ||= [];
+  const rule = db.scoringRules.find(r => r.id === id);
+  if (!rule) return send(res, 404, { error: "rule_not_found" });
+  const input = await body(req);
+  const updated = {
+    ...rule,
+    name: input.name !== undefined ? input.name : rule.name,
+    minScore: input.minScore !== undefined ? Number(input.minScore) : rule.minScore,
+    maxScore: input.maxScore !== undefined ? Number(input.maxScore) : rule.maxScore,
+    resultStatus: input.resultStatus !== undefined ? input.resultStatus : rule.resultStatus,
+    hintText: input.hintText !== undefined ? input.hintText : rule.hintText,
+    order: input.order !== undefined ? Number(input.order) : rule.order,
+    updatedAt: new Date().toISOString()
+  };
+  const errors = validateRule(updated, db.scoringRules, id);
+  if (errors.length > 0) {
+    return send(res, 400, { error: "validation_failed", errors });
+  }
+  Object.assign(rule, updated);
+  await saveDb(db);
+  return send(res, 200, rule);
+}
+
+export async function deleteScoringRule(req, res, id) {
+  const db = await loadDb();
+  db.scoringRules ||= [];
+  const idx = db.scoringRules.findIndex(r => r.id === id);
+  if (idx === -1) return send(res, 404, { error: "rule_not_found" });
+  db.scoringRules.splice(idx, 1);
+  await saveDb(db);
+  return send(res, 200, { success: true });
+}
+
+export async function reorderScoringRules(req, res) {
+  const db = await loadDb();
+  db.scoringRules ||= [];
+  const input = await body(req);
+  const orderMap = input.orders || {};
+  for (const rule of db.scoringRules) {
+    if (orderMap[rule.id] !== undefined) {
+      rule.order = Number(orderMap[rule.id]);
+      rule.updatedAt = new Date().toISOString();
+    }
+  }
+  await saveDb(db);
+  const rules = getSortedRules(db.scoringRules);
+  return send(res, 200, { rules });
+}
+
+export async function previewRuleMatch(req, res) {
+  const db = await loadDb();
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const score = Number(url.searchParams.get("score"));
+  if (isNaN(score)) {
+    return send(res, 400, { error: "invalid_score" });
+  }
+  const match = matchRule(score, db.scoringRules || []);
+  return send(res, 200, { score, match });
 }

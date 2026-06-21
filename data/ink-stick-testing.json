@@ -92,13 +92,21 @@
       "glueRatio": "8%",
       "ageYears": 3,
       "storage": "试样盒C",
-      "status": "重点观察",
+      "status": "已试磨",
       "logs": [
         {
           "at": "2026-06-21T03:50:28.907Z",
           "step": "试磨",
           "note": "棉连纸，评分79",
           "score": 79
+        },
+        {
+          "at": "2026-06-21T09:36:04.722Z",
+          "step": "试磨",
+          "note": "净皮宣纸，20滴，评分90，命中规则：优秀（已试磨）",
+          "score": 90,
+          "ruleId": "SCR-DEFAULT-HIGH",
+          "ruleName": "优秀（已试磨）"
         }
       ],
       "tests": [
@@ -110,6 +118,16 @@
           "colorLayer": "偏暖",
           "sediment": "少",
           "score": 79
+        },
+        {
+          "at": "2026-06-21T09:36:04.722Z",
+          "paper": "净皮宣纸",
+          "water": "20滴",
+          "score": 90,
+          "createdBy": "测试用户",
+          "ruleId": "SCR-DEFAULT-HIGH",
+          "ruleName": "优秀（已试磨）",
+          "ruleHint": "试磨评分优秀，可正式使用"
         }
       ],
       "versions": [
@@ -148,9 +166,90 @@
             ]
           },
           "changes": null
+        },
+        {
+          "version": 2,
+          "createdAt": "2026-06-21T09:36:04.722Z",
+          "createdBy": "测试用户",
+          "reason": "创建试磨记录，评分90",
+          "action": "revise",
+          "parentVersion": 1,
+          "snapshot": {
+            "status": "已试磨",
+            "storage": "试样盒C",
+            "smokeSource": "桐油烟",
+            "glueRatio": "8%",
+            "ageYears": 3,
+            "batchId": "BAT-20260611-02",
+            "logs": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "step": "试磨",
+                "note": "棉连纸，评分79",
+                "score": 79
+              },
+              {
+                "at": "2026-06-21T09:36:04.722Z",
+                "step": "试磨",
+                "note": "净皮宣纸，20滴，评分90，命中规则：优秀（已试磨）",
+                "score": 90,
+                "ruleId": "SCR-DEFAULT-HIGH",
+                "ruleName": "优秀（已试磨）"
+              }
+            ],
+            "tests": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "paper": "棉连纸",
+                "water": "18滴",
+                "speed": "中",
+                "colorLayer": "偏暖",
+                "sediment": "少",
+                "score": 79
+              },
+              {
+                "at": "2026-06-21T09:36:04.722Z",
+                "paper": "净皮宣纸",
+                "water": "20滴",
+                "score": 90,
+                "createdBy": "测试用户",
+                "ruleId": "SCR-DEFAULT-HIGH",
+                "ruleName": "优秀（已试磨）",
+                "ruleHint": "试磨评分优秀，可正式使用"
+              }
+            ]
+          },
+          "changes": {
+            "status": {
+              "before": "重点观察",
+              "after": "已试磨"
+            },
+            "testsAdded": [
+              {
+                "at": "2026-06-21T09:36:04.722Z",
+                "paper": "净皮宣纸",
+                "water": "20滴",
+                "score": 90,
+                "createdBy": "测试用户",
+                "ruleId": "SCR-DEFAULT-HIGH",
+                "ruleName": "优秀（已试磨）",
+                "ruleHint": "试磨评分优秀，可正式使用"
+              }
+            ],
+            "logsAdded": [
+              {
+                "at": "2026-06-21T09:36:04.722Z",
+                "step": "试磨",
+                "note": "净皮宣纸，20滴，评分90，命中规则：优秀（已试磨）",
+                "score": 90,
+                "ruleId": "SCR-DEFAULT-HIGH",
+                "ruleName": "优秀（已试磨）"
+              }
+            ]
+          }
         }
       ],
-      "currentVersion": 1
+      "currentVersion": 2
     }
   ],
   "templates": [
@@ -176,5 +275,40 @@
     }
   ],
   "tasks": [],
-  "importBatches": []
+  "importBatches": [],
+  "scoringRules": [
+    {
+      "id": "SCR-DEFAULT-HIGH",
+      "name": "优秀（已试磨）",
+      "minScore": 85,
+      "maxScore": 100,
+      "resultStatus": "已试磨",
+      "hintText": "试磨评分优秀，可正式使用",
+      "order": 1,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "SCR-DEFAULT-MID",
+      "name": "合格（重点观察）",
+      "minScore": 70,
+      "maxScore": 84,
+      "resultStatus": "重点观察",
+      "hintText": "试磨评分合格，需继续观察使用效果",
+      "order": 2,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    },
+    {
+      "id": "SCR-DEFAULT-LOW",
+      "name": "待改进（建议复测）",
+      "minScore": 0,
+      "maxScore": 69,
+      "resultStatus": "待试磨",
+      "hintText": "试磨评分偏低，建议调整参数后复测",
+      "order": 3,
+      "createdAt": "2026-01-01T00:00:00.000Z",
+      "updatedAt": "2026-01-01T00:00:00.000Z"
+    }
+  ]
 }
