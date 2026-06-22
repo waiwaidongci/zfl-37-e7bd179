@@ -20,12 +20,6 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3037);
 
-process.on("uncaughtException", (err) => {
-  if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
-    console.error("Uncaught exception:", err.message);
-  }
-});
-
 function html(res, text) {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(text);
