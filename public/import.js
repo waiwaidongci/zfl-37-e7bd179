@@ -241,20 +241,12 @@ backToImportBtn.addEventListener('click', () => {
   batchesSection.style.display = 'none';
 });
 
-function buildRemapOptions(analysis) {
-  const usedFields = new Set(analysis.fieldMapping.map(fm => fm.field));
-  const available = MAPPABLE_FIELDS.filter(f => !usedFields.has(f.key) || f.required);
-  return available;
-}
-
 function renderPreview(analysis) {
   previewSummary.innerHTML = `
     <div class="preview-stat"><span class="meta">总行数</span><strong>${analysis.totalRows}</strong></div>
     <div class="preview-stat ${analysis.importableCount > 0 ? 'ok' : ''}"><span class="meta">可导入</span><strong>${analysis.importableCount}</strong></div>
     <div class="preview-stat ${analysis.errorCount > 0 ? 'warn' : ''}"><span class="meta">错误数</span><strong>${analysis.errorCount}</strong></div>
   `;
-
-  const usedFields = new Set(analysis.fieldMapping.map(fm => fm.field));
 
   fieldMappingList.innerHTML = analysis.fieldMapping.map(fm => `
     <div class="field-mapping-item">

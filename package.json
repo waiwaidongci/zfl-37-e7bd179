@@ -7,7 +7,8 @@
     "start": "node server.js",
     "test:scoring": "node test-scoring-rules.js",
     "test:lifecycle": "node test-lifecycle.js",
+    "test:csv": "node test-csv-import.js",
     "test:views": "node test-views.js",
-    "test": "node test-scoring-rules.js && node test-lifecycle.js && node test-views.js"
+    "test": "node test-scoring-rules.js && node test-lifecycle.js && node test-csv-import.js && node test-views.js"
   }
 }
