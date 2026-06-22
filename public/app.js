@@ -168,7 +168,7 @@ function openBatchDrawer(batchId) {
     drawerBatchSmoke.textContent = detail.smokeSource + ' · 入库日期：' + detail.receiveDate;
     drawerTotal.textContent = detail.total || 0;
     drawerUntested.textContent = detail.untestedCount || 0;
-    drawerTested.textContent = detail.statusCounts?.['已试磨'] || 0;
+    drawerTested.textContent = detail.testedCount || 0;
     drawerRetest.textContent = detail.suggestRetestCount || 0;
     drawerAvgScore.textContent = detail.avgScore !== null ? detail.avgScore : '-';
 
@@ -222,6 +222,10 @@ function renderDrawerItems() {
     const storageBadge = item.storage
       ? '<span class="pill">' + item.storage + '</span>'
       : '<span class="pill warn">未指定位置</span>';
+    const retestBadge = item.suggestRetest
+      ? '<span class="pill warn">建议复测</span>'
+      : '';
+    const canCreateTask = (item.status === '待试磨' || item.suggestRetest) && !item.hasActiveTask;
 
     return '<div class="drawer-item">' +
       '<div class="drawer-item-header">' +
@@ -232,9 +236,9 @@ function renderDrawerItems() {
         '<span>烟料：' + (item.smokeSource || '-') + '</span>' +
         '<span>年限：' + (item.ageYears ?? '-') + ' 年</span>' +
       '</div>' +
-      '<div class="drawer-item-badges">' + scoreBadge + storageBadge + taskBadge + '</div>' +
+      '<div class="drawer-item-badges">' + scoreBadge + storageBadge + retestBadge + taskBadge + '</div>' +
       '<div class="drawer-item-actions">' +
-        (item.status === '待试磨' && !item.hasActiveTask
+        (canCreateTask
           ? '<button class="secondary gold" data-drawer-create-task="' + item.id + '">创建试磨任务</button>'
           : '') +
         (item.hasActiveTask
@@ -809,7 +813,7 @@ drawerRetestBtn.onclick = () => {
     return;
   }
   const itemIds = currentBatchDetail.items
-    .filter(i => i.latestScore !== null && i.latestScore < 70)
+    .filter(i => i.suggestRetest)
     .map(i => i.id);
   createBatchTasksFromDrawer(null, itemIds);
 };

@@ -54,6 +54,7 @@ table { width:100%; border-collapse:collapse; } th,td { text-align:left; padding
 .pill.ongoing { background:#eef3fa; border-color:#b8c9e6; color:#4a6b9b; }
 .pill.done { background:#eff5ea; border-color:#c2d4b3; color:var(--accent); }
 .pill.cancelled { background:#f0f0ee; border-color:#cfd3cb; color:var(--muted); }
+.pill.watch { background:#faeae6; border-color:#e3bcb1; color:var(--warn); }
 
 .home-todo-alert { background:linear-gradient(135deg,#fff9ed 0%,#fff5e0 100%); border:1px solid #e6d5a8; border-radius:10px; padding:16px; margin-bottom:14px; display:flex; align-items:center; gap:16px; flex-wrap:wrap; }
 .home-todo-title { font-weight:700; font-size:16px; color:#7a6430; }

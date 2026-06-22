@@ -132,7 +132,7 @@ export async function getBatch(req, res, id) {
   const db = await loadDb();
   const batch = (db.batches || []).find(b => b.id === id || b.code === id);
   if (!batch) return send(res, 404, { error: "batch_not_found" });
-  const detail = computeBatchDetail(batch, db.items, db.tasks || []);
+  const detail = computeBatchDetail(batch, db.items, db.tasks || [], db.scoringRules || null);
   return send(res, 200, {
     ...batch,
     ...detail

@@ -158,11 +158,11 @@ export function summarize(item) {
 export function computeBatchProgress(batch, items) {
   const batchItems = items.filter(i => i.batchId === batch.id);
   const total = batchItems.length;
-  const tested = batchItems.filter(i => i.status === "已试磨").length;
+  const tested = batchItems.filter(i => i.status !== "待试磨").length;
   return { total, tested, percent: total ? Math.round((tested / total) * 100) : 0 };
 }
 
-export function computeBatchDetail(batch, items, tasks = []) {
+export function computeBatchDetail(batch, items, tasks = [], scoringRules = null) {
   const batchItems = items.filter(i => i.batchId === batch.id);
   const total = batchItems.length;
 
@@ -175,7 +175,7 @@ export function computeBatchDetail(batch, items, tasks = []) {
   const untestedCount = batchItems.filter(i => i.status === "待试磨").length;
   const testedItems = batchItems.filter(i => i.status !== "待试磨");
 
-  const itemsWithLatestScore = batchItems.map(item => {
+  const getItemLatestScore = (item) => {
     const allTests = item.tests || [];
     const logTests = (item.logs || [])
       .filter(l => l.step === "试磨" && typeof l.score === "number")
@@ -183,21 +183,49 @@ export function computeBatchDetail(batch, items, tasks = []) {
     const combined = [...allTests, ...logTests]
       .filter(t => t.at && typeof t.score === "number")
       .sort((a, b) => (b.at || "").localeCompare(a.at || ""));
-    const latestTest = combined[0] || null;
+    return combined[0] || null;
+  };
+
+  const isSuggestRetest = (item, latestScore) => {
+    if (item.status === "建议复测") return true;
+    if (latestScore === null) return false;
+    if (scoringRules && scoringRules.length) {
+      try {
+        const sorted = [...scoringRules].sort((a, b) => {
+          const o = (a.order || 0) - (b.order || 0);
+          return o !== 0 ? o : (b.maxScore || 0) - (a.maxScore || 0);
+        });
+        for (const rule of sorted) {
+          const min = Number(rule.minScore);
+          const max = Number(rule.maxScore);
+          if (latestScore >= min && latestScore <= max) {
+            return rule.resultStatus === "建议复测";
+          }
+        }
+      } catch (e) {}
+    }
+    return latestScore < 70;
+  };
+
+  const itemsWithDetail = batchItems.map(item => {
+    const latestTest = getItemLatestScore(item);
     const latestScore = latestTest ? latestTest.score : null;
+    const latestTestAt = latestTest ? latestTest.at : null;
     const activeTask = tasks.find(t =>
       t.itemId === item.id && t.status !== "已完成" && t.status !== "已取消"
     );
+    const suggestRetest = isSuggestRetest(item, latestScore);
     return {
       ...summarize(item),
       latestScore,
-      latestTestAt: latestTest ? latestTest.at : null,
+      latestTestAt,
       hasActiveTask: !!activeTask,
-      activeTaskId: activeTask ? activeTask.id : null
+      activeTaskId: activeTask ? activeTask.id : null,
+      suggestRetest
     };
   });
 
-  const testedScores = itemsWithLatestScore
+  const testedScores = itemsWithDetail
     .filter(i => i.latestScore !== null)
     .map(i => i.latestScore);
   const avgScore = testedScores.length
@@ -207,12 +235,10 @@ export function computeBatchDetail(batch, items, tasks = []) {
     ? Math.max(...testedScores)
     : null;
 
-  const suggestRetestCount = itemsWithLatestScore.filter(i =>
-    i.latestScore !== null && i.latestScore < 70
-  ).length;
+  const suggestRetestCount = itemsWithDetail.filter(i => i.suggestRetest).length;
 
   const itemsByStatus = {};
-  for (const item of itemsWithLatestScore) {
+  for (const item of itemsWithDetail) {
     const s = item.status || "待试磨";
     if (!itemsByStatus[s]) itemsByStatus[s] = [];
     itemsByStatus[s].push(item);
@@ -226,7 +252,7 @@ export function computeBatchDetail(batch, items, tasks = []) {
     latestScore,
     suggestRetestCount,
     statusCounts,
-    items: itemsWithLatestScore,
+    items: itemsWithDetail,
     itemsByStatus,
     progress: computeBatchProgress(batch, items)
   };
