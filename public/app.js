@@ -1,6 +1,5 @@
 const fields = [["code","墨锭编号","text"],["smokeSource","烟料来源","text"],["glueRatio","胶料比例","text"],["ageYears","存放年限","number"],["storage","存放位置","text"]];
 const stages = ["待试磨","已试磨","重点观察"];
-const LIFECYCLE_STATES = ["建档","入库","已试磨","复测","重点观察","归档"];
 const extraFields = [["paper","试磨纸张"],["water","加水量"],["speed","出墨速度"],["colorLayer","墨色层次"],["sediment","沉淀情况"],["score","评分"]];
 const batchFields = [["code","批次编号","text"],["smokeSource","烟料来源","text"],["receiveDate","入库日期","date"],["note","备注说明","textarea"]];
 const templateFields = [["name","方案名称","text"],["paper","试磨纸张","text"],["water","加水量","text"],["grindingTime","研磨时长","text"],["speed","出墨速度","text"],["observationPoints","观察重点","textarea"]];
@@ -52,6 +51,27 @@ const overdueCountEl = document.querySelector('#overdueCount');
 const completedCountEl = document.querySelector('#completedCount');
 const homeTodoAlert = document.querySelector('#homeTodoAlert');
 
+const batchDetailDrawer = document.querySelector('#batchDetailDrawer');
+const drawerClose = document.querySelector('#drawerClose');
+const drawerBatchCode = document.querySelector('#drawerBatchCode');
+const drawerBatchSmoke = document.querySelector('#drawerBatchSmoke');
+const drawerTotal = document.querySelector('#drawerTotal');
+const drawerUntested = document.querySelector('#drawerUntested');
+const drawerTested = document.querySelector('#drawerTested');
+const drawerRetest = document.querySelector('#drawerRetest');
+const drawerAvgScore = document.querySelector('#drawerAvgScore');
+const drawerProgressBar = document.querySelector('#drawerProgressBar');
+const drawerProgressText = document.querySelector('#drawerProgressText');
+const drawerItemList = document.querySelector('#drawerItemList');
+const drawerEmpty = document.querySelector('#drawerEmpty');
+const drawerStatusFilter = document.querySelector('#drawerStatusFilter');
+const drawerSearch = document.querySelector('#drawerSearch');
+const drawerCreateTasksBtn = document.querySelector('#drawerCreateTasksBtn');
+const drawerRetestBtn = document.querySelector('#drawerRetestBtn');
+
+let currentBatchDetail = null;
+let drawerItems = [];
+
 let items = [];
 let batches = [];
 let templates = [];
@@ -61,282 +81,12 @@ let tasks = [];
 let todayTasksData = null;
 let itemTaskCache = {};
 let selectedCompareIds = new Set();
-let scoringRules = [];
-let scoringCoverage = null;
-let scoringStatuses = [];
-let views = [];
-let currentViewId = null;
 
-async function api(path, options, extra = {}) {
-  const opts = options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : (options || {});
-  if (extra._baseVersion !== undefined && opts.body) {
-    try {
-      const body = JSON.parse(opts.body);
-      body._baseVersion = extra._baseVersion;
-      if (extra._conflictResolution) body._conflictResolution = extra._conflictResolution;
-      opts.body = JSON.stringify(body);
-    } catch(e) {}
-  }
-  const res = await fetch(path, opts);
+async function api(path, options) {
+  const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
   const data = await res.json();
-  if (data && data.ok === false) {
-    const err = new Error(data.message || data.error || '请求失败');
-    err.error = data.error;
-    err.conflict = data.conflict;
-    err.details = data;
-    throw err;
-  }
-  return data && data.data !== undefined ? data.data : data;
-}
-
-const FIELD_LABELS = {
-  status: '状态', storage: '存放位置', smokeSource: '烟料来源',
-  glueRatio: '胶料比例', ageYears: '存放年限', batchId: '所属批次',
-  code: '编号', name: '名称', paper: '试磨纸张', water: '加水量',
-  grindingTime: '研磨时长', speed: '出墨速度', observationPoints: '观察重点',
-  isDefault: '是否默认模板', scheduledDate: '计划日期', assignee: '负责人',
-  note: '备注', minScore: '最低分', maxScore: '最高分',
-  resultStatus: '结果状态', hintText: '提示文案', order: '优先级',
-  receiveDate: '入库日期', logs: '操作日志', tests: '试磨记录'
-};
-
-let pendingConflict = null;
-let pendingConflictCallback = null;
-let pendingConflictOriginalPayload = null;
-let pendingConflictApiContext = null;
-let pendingDeleteConflict = null;
-
-function showDeleteConflictModal(conflict, callback, apiContext) {
-  pendingDeleteConflict = { conflict, callback, apiContext };
-  const modal = document.querySelector('#conflictModal');
-  const summary = document.querySelector('#conflictSummary');
-  const fieldsEl = document.querySelector('#conflictFields');
-
-  summary.innerHTML = `
-    <h3>⚠️ 删除冲突</h3>
-    <div class="meta">您要删除的记录已被其他用户修改。是否仍要删除？</div>
-    <div class="version-info">
-      <span>您的版本：v${conflict.baseVersion}</span>
-      <span>最新版本：v${conflict.currentVersion}</span>
-    </div>
-  `;
-
-  let html = '<div style="padding:16px;background:#fff8e1;border-radius:8px;">';
-  html += '<div style="font-weight:600;margin-bottom:8px;">最新数据预览：</div>';
-  html += '<div style="font-size:12px;color:#666;word-break:break-all;">';
-  html += escapeHtml(JSON.stringify(conflict.serverRecord, null, 2));
-  html += '</div></div>';
-  fieldsEl.innerHTML = html;
-
-  fieldsEl.querySelectorAll('[data-choice-server]').forEach(btn => btn.style.display = 'none');
-  fieldsEl.querySelectorAll('[data-choice-client]').forEach(btn => btn.style.display = 'none');
-  document.querySelector('#conflictKeepAllServer').style.display = 'none';
-  document.querySelector('#conflictKeepAllClient').style.display = 'none';
-  const submitBtn = document.querySelector('#conflictSubmit');
-  submitBtn.textContent = '✓ 确认删除';
-  submitBtn.dataset.mode = 'delete';
-  modal.style.display = 'flex';
-}
-
-function showConflictModal(conflict, originalPayload, callback, apiContext) {
-  pendingConflict = conflict;
-  pendingConflictCallback = callback;
-  pendingConflictOriginalPayload = originalPayload;
-  pendingConflictApiContext = apiContext;
-
-  const modal = document.querySelector('#conflictModal');
-  const summary = document.querySelector('#conflictSummary');
-  const fieldsEl = document.querySelector('#conflictFields');
-
-  document.querySelector('#conflictKeepAllServer').style.display = '';
-  document.querySelector('#conflictKeepAllClient').style.display = '';
-  const submitBtn = document.querySelector('#conflictSubmit');
-  submitBtn.textContent = '✓ 确认并提交';
-  submitBtn.dataset.mode = 'update';
-
-  const fieldLabels = Object.keys(conflict.conflictingFields).map(f => FIELD_LABELS[f] || f).join('、');
-  summary.innerHTML = `
-    <h3>⚠️ 检测到数据冲突</h3>
-    <div class="meta">您正在修改的数据已被其他人更新。请选择每个字段要保留哪个版本：</div>
-    <div class="version-info">
-      <span>您的版本：v${conflict.baseVersion}</span>
-      <span>最新版本：v${conflict.currentVersion}</span>
-      <span>冲突字段：${Object.keys(conflict.conflictingFields).length} 个</span>
-    </div>
-  `;
-
-  let html = '';
-  for (const [field, info] of Object.entries(conflict.conflictingFields)) {
-    const label = FIELD_LABELS[field] || field;
-    const serverVal = formatConflictValue(info.serverValue);
-    const clientVal = formatConflictValue(info.clientValue);
-    html += `
-      <div class="conflict-field" data-conflict-field="${field}">
-        <div class="conflict-field-header">
-          <span class="conflict-field-name">${label}</span>
-          <div class="conflict-field-choice">
-            <button class="secondary active-server" data-choice-server="${field}">采用最新</button>
-            <button class="secondary" data-choice-client="${field}">保留我的</button>
-          </div>
-        </div>
-        <div class="conflict-field-values">
-          <div class="conflict-value server">
-            <span class="conflict-value-label">最新数据（服务器）</span>
-            <div class="conflict-value-content">${serverVal}</div>
-          </div>
-          <div class="conflict-value client">
-            <span class="conflict-value-label">我的修改（本地）</span>
-            <div class="conflict-value-content">${clientVal}</div>
-          </div>
-        </div>
-      </div>
-    `;
-  }
-  fieldsEl.innerHTML = html;
-  modal.style.display = 'flex';
-
-  fieldsEl.querySelectorAll('[data-choice-server]').forEach(btn => {
-    btn.onclick = () => setFieldChoice(btn.dataset.choiceServer, 'server');
-  });
-  fieldsEl.querySelectorAll('[data-choice-client]').forEach(btn => {
-    btn.onclick = () => setFieldChoice(btn.dataset.choiceClient, 'client');
-  });
-}
-
-function formatConflictValue(val) {
-  if (val === null || val === undefined) return '<em class="meta">（空）</em>';
-  if (typeof val === 'object') return '<code style="font-size:11px">' + escapeHtml(JSON.stringify(val)) + '</code>';
-  return escapeHtml(String(val));
-}
-
-function setFieldChoice(field, choice) {
-  const fieldEl = document.querySelector(`[data-conflict-field="${field}"]`);
-  if (!fieldEl) return;
-  const srvBtn = fieldEl.querySelector(`[data-choice-server="${field}"]`);
-  const cliBtn = fieldEl.querySelector(`[data-choice-client="${field}"]`);
-  if (choice === 'server') {
-    srvBtn.classList.add('active-server');
-    srvBtn.classList.remove('secondary');
-    cliBtn.classList.remove('active-client');
-    cliBtn.classList.add('secondary');
-  } else {
-    cliBtn.classList.add('active-client');
-    cliBtn.classList.remove('secondary');
-    srvBtn.classList.remove('active-server');
-    srvBtn.classList.add('secondary');
-  }
-}
-
-function collectFieldResolutions() {
-  const resolution = {};
-  if (!pendingConflict) return resolution;
-  for (const field of Object.keys(pendingConflict.conflictingFields)) {
-    const fieldEl = document.querySelector(`[data-conflict-field="${field}"]`);
-    const srvBtn = fieldEl?.querySelector(`[data-choice-server="${field}"]`);
-    const cliBtn = fieldEl?.querySelector(`[data-choice-client="${field}"]`);
-    if (cliBtn && cliBtn.classList.contains('active-client')) {
-      resolution[field] = 'keep_client';
-    } else {
-      resolution[field] = 'keep_server';
-    }
-  }
-  return resolution;
-}
-
-function closeConflictModal() {
-  document.querySelector('#conflictModal').style.display = 'none';
-  pendingConflict = null;
-  pendingConflictCallback = null;
-  pendingConflictOriginalPayload = null;
-  pendingConflictApiContext = null;
-  pendingDeleteConflict = null;
-}
-
-async function resolveConflictAndRetry() {
-  if (pendingDeleteConflict) {
-    const { conflict, callback, apiContext } = pendingDeleteConflict;
-    const { path, options, baseVersion, onSuccess } = apiContext;
-    try {
-      const result = await api(path, options, {
-        _baseVersion: baseVersion,
-        _conflictResolution: { _delete: "force" }
-      });
-      closeConflictModal();
-      if (onSuccess) onSuccess(result);
-      if (callback) callback(result);
-    } catch(err) {
-      closeConflictModal();
-      alert('删除失败：' + (err.message || '未知错误'));
-    }
-    return;
-  }
-
-  if (!pendingConflict || !pendingConflictApiContext) return;
-  const resolution = collectFieldResolutions();
-  const { path, options, baseVersion, onSuccess } = pendingConflictApiContext;
-  try {
-    const result = await api(path, options, {
-      _baseVersion: baseVersion,
-      _conflictResolution: resolution
-    });
-    closeConflictModal();
-    if (onSuccess) onSuccess(result);
-    if (pendingConflictCallback) pendingConflictCallback(result);
-  } catch(err) {
-    if (err.conflict) {
-      alert('仍然存在冲突，请重新选择：' + (err.message || ''));
-    } else {
-      closeConflictModal();
-      alert('提交失败：' + (err.message || '未知错误'));
-    }
-  }
-}
-
-function bindConflictModalEvents() {
-  document.querySelector('#closeConflictModal').onclick = closeConflictModal;
-  document.querySelector('#conflictCancel').onclick = closeConflictModal;
-  document.querySelector('#conflictSubmit').onclick = resolveConflictAndRetry;
-  document.querySelector('#conflictKeepAllServer').onclick = () => {
-    if (!pendingConflict) return;
-    for (const field of Object.keys(pendingConflict.conflictingFields)) {
-      setFieldChoice(field, 'server');
-    }
-  };
-  document.querySelector('#conflictKeepAllClient').onclick = () => {
-    if (!pendingConflict) return;
-    for (const field of Object.keys(pendingConflict.conflictingFields)) {
-      setFieldChoice(field, 'client');
-    }
-  };
-  const modal = document.querySelector('#conflictModal');
-  modal.addEventListener('click', (e) => {
-    if (e.target === modal) closeConflictModal();
-  });
-}
-
-async function apiWithConflict(path, options, getVersionFn, onSuccess) {
-  try {
-    const baseVersion = getVersionFn ? getVersionFn() : 0;
-    const result = await api(path, options, { _baseVersion: baseVersion });
-    if (onSuccess) onSuccess(result);
-    return result;
-  } catch(err) {
-    if (err.conflict) {
-      return new Promise((resolve) => {
-        const apiContext = { path, options, baseVersion: err.conflict.baseVersion, onSuccess };
-        showConflictModal(
-          err.conflict,
-          options?.body ? JSON.parse(options.body) : {},
-          (finalResult) => {
-            resolve(finalResult);
-          },
-          apiContext
-        );
-      });
-    }
-    alert(err.message || '操作失败');
-    throw err;
-  }
+  if (!res.ok) throw new Error(data.error || '请求失败');
+  return data;
 }
 
 function switchTab(tab) {
@@ -346,31 +96,14 @@ function switchTab(tab) {
   document.querySelector('#tab-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#tab-templates').style.display = tab === 'templates' ? '' : 'none';
   document.querySelector('#tab-tasks').style.display = tab === 'tasks' ? '' : 'none';
-  document.querySelector('#tab-scoring').style.display = tab === 'scoring' ? '' : 'none';
-  document.querySelector('#tab-lifecycle').style.display = tab === 'lifecycle' ? '' : 'none';
   document.querySelector('#view-items').style.display = tab === 'items' ? '' : 'none';
   document.querySelector('#view-batches').style.display = tab === 'batches' ? '' : 'none';
   document.querySelector('#view-storage').style.display = tab === 'storage' ? '' : 'none';
   document.querySelector('#view-templates').style.display = tab === 'templates' ? '' : 'none';
   document.querySelector('#view-tasks').style.display = tab === 'tasks' ? '' : 'none';
-  document.querySelector('#view-scoring').style.display = tab === 'scoring' ? '' : 'none';
-  document.querySelector('#view-lifecycle').style.display = tab === 'lifecycle' ? '' : 'none';
   if (tab === 'storage') {
     showKanbanView();
   }
-}
-
-function statusClass(status) {
-  const s = (status || '').toString();
-  if (s === '待试磨' || s === '建档' || s === '入库') return 'pending';
-  if (s === '已试磨') return 'done';
-  if (s === '重点观察') return 'watch';
-  if (s === '复测' || s === '建议复测' || /复测|重测|返修/.test(s)) return 'retest';
-  if (s === '归档') return 'archived';
-  if (/完成|合格|通过|优秀/.test(s)) return 'done';
-  if (/观察|注意|检查|待/.test(s)) return 'watch';
-  if (/进行|中|处理|评估/.test(s)) return 'ongoing';
-  return 'custom';
 }
 
 function renderForms() {
@@ -384,144 +117,12 @@ function renderForms() {
     if (type === 'textarea') return '<label>'+label+'</label><textarea name="'+key+'"></textarea>';
     return '<label>'+label+'</label><input name="'+key+'" type="'+type+'" '+(key==='name'?'required':'')+'>';
   }).join('');
-  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
-  const savedStatusFilter = statusFilter.value;
-  statusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
-  statusFilter.value = savedStatusFilter;
-  const savedStorageFilter = storageStatusFilter.value;
-  storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
-  storageStatusFilter.value = savedStorageFilter;
-  statusSelect.innerHTML = stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
-  const revisionStatusEl = document.querySelector('#revisionStatus');
-  if (revisionStatusEl) {
-    revisionStatusEl.innerHTML = '<option value="">不修改</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
-  }
-  const srResultStatusEl = document.querySelector('#srResultStatus');
-  if (srResultStatusEl) {
-    srResultStatusEl.innerHTML = '<option value="">-- 选择或自定义 --</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
-  }
-  taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option value="'+s+'">'+s+'</option>').join('');
+  statusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
+  storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stages.map(s => '<option>'+s+'</option>').join('');
+  statusSelect.innerHTML = stages.map(s => '<option>'+s+'</option>').join('');
+  taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option>'+s+'</option>').join('');
   const today = new Date().toISOString().slice(0,10);
   document.querySelector('#taskDate').value = today;
-}
-
-function renderViews() {
-  const viewsListEl = document.querySelector('#viewsList');
-  if (!viewsListEl) return;
-  if (!views || views.length === 0) {
-    viewsListEl.innerHTML = '<span class="meta" style="padding:4px 8px">暂无视图</span>';
-    return;
-  }
-  const currentFilters = {
-    status: statusFilter.value,
-    batchId: batchFilter.value,
-    keyword: document.querySelector('#search').value.trim()
-  };
-  viewsListEl.innerHTML = views.map(v => {
-    const isActive = currentViewId === v.id;
-    const isCurrentMatch = !isActive &&
-      currentFilters.status === (v.filters.status || '') &&
-      currentFilters.batchId === (v.filters.batchId || '') &&
-      currentFilters.keyword === (v.filters.keyword || '');
-    const filterDesc = [
-      v.filters.status ? '状态:' + v.filters.status : null,
-      v.filters.batchId ? '指定批次' : null,
-      v.filters.keyword ? '关键词:' + v.filters.keyword : null
-    ].filter(Boolean).join(' · ') || '全部';
-    const systemBadge = v.isSystem ? '<span class="pill" style="background:#eef3ea;border-color:#c2d4b3;color:#526f43;font-size:10px;padding:1px 6px">系统</span>' : '';
-    return '<div class="view-chip ' + (isActive ? 'active' : '') + (isCurrentMatch ? ' match' : '') + '" data-view-id="' + v.id + '" title="' + escapeHtml(filterDesc) + '">' +
-      '<span class="view-chip-name" data-view-apply="' + v.id + '">' +
-        systemBadge + ' ' + escapeHtml(v.name) +
-      '</span>' +
-      '<span class="view-chip-desc meta">' + escapeHtml(filterDesc) + '</span>' +
-      (v.isSystem ? '' : '<button class="view-chip-delete" data-view-delete="' + v.id + '" title="删除视图">×</button>') +
-    '</div>';
-  }).join('');
-  viewsListEl.querySelectorAll('[data-view-apply]').forEach(el => el.onclick = () => applyView(el.dataset.viewApply));
-  viewsListEl.querySelectorAll('[data-view-delete]').forEach(btn => btn.onclick = (e) => {
-    e.stopPropagation();
-    deleteView(btn.dataset.viewDelete);
-  });
-}
-
-function applyView(viewId) {
-  const view = views.find(v => v.id === viewId);
-  if (!view) return;
-  currentViewId = viewId;
-  statusFilter.value = view.filters.status || '';
-  batchFilter.value = view.filters.batchId || '';
-  document.querySelector('#search').value = view.filters.keyword || '';
-  renderViews();
-  render();
-}
-
-async function saveCurrentAsView() {
-  const filters = {
-    status: statusFilter.value,
-    batchId: batchFilter.value,
-    keyword: document.querySelector('#search').value.trim()
-  };
-  const defaultName = [
-    filters.status || '全部状态',
-    filters.batchId ? '指定批次' : '全部批次',
-    filters.keyword ? '含' + filters.keyword : ''
-  ].filter(Boolean).join(' · ');
-  const name = prompt('请输入视图名称：', defaultName);
-  if (name === null) return;
-  const trimmed = name.trim();
-  if (!trimmed) { alert('视图名称不能为空'); return; }
-  const createdBy = prompt('请输入保存人姓名：') || '未指定用户';
-  try {
-    await api('/api/views', { method: 'POST', body: JSON.stringify({ name: trimmed, filters, createdBy }) });
-    await load();
-  } catch(err) {
-    if (err.conflict) {
-      showConflictModal(err.conflict, { name: trimmed, filters, createdBy }, () => load(), {
-        path: '/api/views', options: { method: 'POST', body: JSON.stringify({ name: trimmed, filters, createdBy }) },
-        baseVersion: err.conflict.baseVersion, onSuccess: () => load()
-      });
-      return;
-    }
-    alert('保存失败：' + (err.message || '未知错误'));
-  }
-}
-
-async function deleteView(viewId) {
-  const view = views.find(v => v.id === viewId);
-  if (!view) return;
-  if (view.isSystem) { alert('系统预设视图不能删除'); return; }
-  if (!confirm('确定删除视图「' + view.name + '」？')) return;
-  const current = views.find(v => v.id === viewId);
-  const baseVersion = current ? current._version : 0;
-  const path = '/api/views/' + viewId;
-  const options = { method: 'DELETE', body: JSON.stringify({}) };
-  try {
-    await api(path, options, { _baseVersion: baseVersion });
-    if (currentViewId === viewId) currentViewId = null;
-    await load();
-  } catch(err) {
-    if (err.conflict) {
-      if (err.conflict.type === 'delete_conflict') {
-        showDeleteConflictModal(err.conflict, () => {
-          if (currentViewId === viewId) currentViewId = null;
-          load();
-        }, { path, options, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-          if (currentViewId === viewId) currentViewId = null;
-          load();
-        }});
-      } else {
-        showConflictModal(err.conflict, {}, () => {
-          if (currentViewId === viewId) currentViewId = null;
-          load();
-        }, { path, options, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-          if (currentViewId === viewId) currentViewId = null;
-          load();
-        }});
-      }
-      return;
-    }
-    alert('删除失败：' + (err.message || '未知错误'));
-  }
 }
 
 function getBatchById(id) { return batches.find(b => b.id === id); }
@@ -559,48 +160,164 @@ function updateCompareButton() {
   if (clearBtn) clearBtn.style.display = count > 0 ? '' : 'none';
 }
 
+function openBatchDrawer(batchId) {
+  api('/api/batches/' + batchId).then(detail => {
+    currentBatchDetail = detail;
+    drawerItems = detail.items || [];
+    drawerBatchCode.textContent = detail.code + ' 批次详情';
+    drawerBatchSmoke.textContent = detail.smokeSource + ' · 入库日期：' + detail.receiveDate;
+    drawerTotal.textContent = detail.total || 0;
+    drawerUntested.textContent = detail.untestedCount || 0;
+    drawerTested.textContent = detail.statusCounts?.['已试磨'] || 0;
+    drawerRetest.textContent = detail.suggestRetestCount || 0;
+    drawerAvgScore.textContent = detail.avgScore !== null ? detail.avgScore : '-';
+
+    const prog = detail.progress || { total: 0, tested: 0, percent: 0 };
+    drawerProgressBar.style.width = prog.percent + '%';
+    drawerProgressText.textContent = prog.tested + '/' + prog.total + ' (' + prog.percent + '%)';
+
+    drawerStatusFilter.innerHTML = '<option value="">全部状态</option>' +
+      stages.map(s => '<option>' + s + '</option>').join('');
+    drawerStatusFilter.value = '';
+    drawerSearch.value = '';
+
+    renderDrawerItems();
+    batchDetailDrawer.style.display = '';
+  }).catch(err => {
+    alert('加载批次详情失败：' + err.message);
+  });
+}
+
+function closeBatchDrawer() {
+  batchDetailDrawer.style.display = 'none';
+  currentBatchDetail = null;
+  drawerItems = [];
+}
+
+function renderDrawerItems() {
+  const status = drawerStatusFilter.value;
+  const q = drawerSearch.value.trim();
+  const visible = drawerItems.filter(item => {
+    if (status && item.status !== status) return false;
+    if (q && !JSON.stringify(item).includes(q)) return false;
+    return true;
+  });
+
+  if (visible.length === 0) {
+    drawerItemList.style.display = 'none';
+    drawerEmpty.style.display = '';
+    return;
+  }
+
+  drawerItemList.style.display = '';
+  drawerEmpty.style.display = 'none';
+
+  drawerItemList.innerHTML = visible.map(item => {
+    const scoreBadge = item.latestScore !== null
+      ? '<span class="pill ' + (item.latestScore >= 85 ? 'done' : item.latestScore >= 70 ? 'pending' : 'warn') + '">评分 ' + item.latestScore + '</span>'
+      : '<span class="pill warn">未试磨</span>';
+    const taskBadge = item.hasActiveTask
+      ? '<span class="pill task-count-badge">有进行中任务</span>'
+      : '';
+    const storageBadge = item.storage
+      ? '<span class="pill">' + item.storage + '</span>'
+      : '<span class="pill warn">未指定位置</span>';
+
+    return '<div class="drawer-item">' +
+      '<div class="drawer-item-header">' +
+        '<strong>' + (item.code || item.id) + '</strong>' +
+        '<span class="pill ' + (item.status === '已试磨' ? 'done' : item.status === '待试磨' ? 'pending' : 'watch') + '">' + item.status + '</span>' +
+      '</div>' +
+      '<div class="drawer-item-meta">' +
+        '<span>烟料：' + (item.smokeSource || '-') + '</span>' +
+        '<span>年限：' + (item.ageYears ?? '-') + ' 年</span>' +
+      '</div>' +
+      '<div class="drawer-item-badges">' + scoreBadge + storageBadge + taskBadge + '</div>' +
+      '<div class="drawer-item-actions">' +
+        (item.status === '待试磨' && !item.hasActiveTask
+          ? '<button class="secondary gold" data-drawer-create-task="' + item.id + '">创建试磨任务</button>'
+          : '') +
+        (item.hasActiveTask
+          ? '<button class="secondary" data-drawer-goto-task="' + item.activeTaskId + '">查看任务</button>'
+          : '') +
+      '</div>' +
+    '</div>';
+  }).join('');
+
+  document.querySelectorAll('[data-drawer-create-task]').forEach(btn => {
+    btn.onclick = () => createSingleTaskFromDrawer(btn.dataset.drawerCreateTask);
+  });
+  document.querySelectorAll('[data-drawer-goto-task]').forEach(btn => {
+    btn.onclick = () => {
+      closeBatchDrawer();
+      switchTab('tasks');
+    };
+  });
+}
+
+async function createSingleTaskFromDrawer(itemId) {
+  const scheduledDate = prompt('请输入计划日期（YYYY-MM-DD）', new Date().toISOString().slice(0, 10));
+  if (!scheduledDate) return;
+  const assignee = prompt('请输入负责人', '');
+  if (assignee === null) return;
+
+  try {
+    await api('/api/tasks', {
+      method: 'POST',
+      body: JSON.stringify({ itemId, scheduledDate, assignee })
+    });
+    alert('任务创建成功！');
+    if (currentBatchDetail) {
+      openBatchDrawer(currentBatchDetail.id);
+    }
+    await load();
+  } catch (err) {
+    alert('创建失败：' + err.message);
+  }
+}
+
+async function createBatchTasksFromDrawer(targetStatus, itemIds = null) {
+  const scheduledDate = prompt('请输入计划日期（YYYY-MM-DD）', new Date().toISOString().slice(0, 10));
+  if (!scheduledDate) return;
+  const assignee = prompt('请输入负责人', '');
+  if (assignee === null) return;
+  const note = prompt('任务备注（可选）', '') || '';
+  if (note === null) return;
+
+  const body = { scheduledDate, assignee, note };
+  if (itemIds && Array.isArray(itemIds)) {
+    body.itemIds = itemIds;
+  } else if (targetStatus) {
+    body.targetStatus = targetStatus;
+  }
+
+  try {
+    const result = await api('/api/batches/' + currentBatchDetail.id + '/tasks', {
+      method: 'POST',
+      body: JSON.stringify(body)
+    });
+    alert('批量创建完成！\n成功创建 ' + result.createdCount + ' 个任务' +
+      (result.skippedCount > 0 ? '\n跳过 ' + result.skippedCount + ' 个（已有未完成任务）' : ''));
+    if (currentBatchDetail) {
+      openBatchDrawer(currentBatchDetail.id);
+    }
+    await load();
+  } catch (err) {
+    alert('批量创建失败：' + err.message);
+  }
+}
+
 function bindCardEvents() {
   document.querySelectorAll('[data-status]').forEach(sel => sel.onchange = async () => {
-    const id = sel.dataset.status;
-    const createdBy = prompt('请输入修改人姓名（用于审计记录）：') || '未指定用户';
-    const reason = prompt('请输入修改状态的原因：') || '更新状态';
-    const currentItem = items.find(x => x.id === id || x.code === id);
-    const baseVersion = currentItem ? currentItem._version : 0;
-    try {
-      await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ status: sel.value, createdBy, reason }) }, { _baseVersion: baseVersion });
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        showConflictModal(err.conflict, { status: sel.value, createdBy, reason }, () => {
-          load();
-        }, { path: '/api/items/'+id, options: { method:'PATCH', body: JSON.stringify({ status: sel.value, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-        return;
-      }
-      alert(err.message || '操作失败');
-      return;
-    }
+    await api('/api/items/'+sel.dataset.status, { method:'PATCH', body: JSON.stringify({ status: sel.value }) });
+    await load();
   });
   document.querySelectorAll('[data-note]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.note;
     const note = prompt('记录备注');
     if (note) {
-      const createdBy = prompt('请输入记录人姓名（用于审计记录）：') || '未指定用户';
-      const reason = prompt('请输入备注原因：') || ('追加备注');
-      const currentItem = items.find(x => x.id === id || x.code === id);
-      const baseVersion = currentItem ? currentItem._version : 0;
-      try {
-        await api('/api/items/'+id+'/logs', { method:'POST', body: JSON.stringify({ step:'备注', note, createdBy, reason }) }, { _baseVersion: baseVersion });
-        await load();
-      } catch(err) {
-        if (err.conflict) {
-          showConflictModal(err.conflict, { step:'备注', note, createdBy, reason }, () => {
-            load();
-          }, { path: '/api/items/'+id+'/logs', options: { method:'POST', body: JSON.stringify({ step:'备注', note, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-          return;
-        }
-        alert(err.message || '操作失败');
-        return;
-      }
+      await api('/api/items/'+id+'/logs', { method:'POST', body: JSON.stringify({ step:'备注', note }) });
+      await load();
     }
   });
   document.querySelectorAll('[data-storage-edit]').forEach(btn => btn.onclick = async () => {
@@ -618,22 +335,8 @@ function bindCardEvents() {
     if (newStorage === null) return;
     const trimmed = newStorage.trim();
     if (trimmed === defaultVal) return;
-    const createdBy = prompt('请输入修改人姓名（用于审计记录）：') || '未指定用户';
-    const reason = prompt('请输入修改存放位置的原因：') || '更新存放位置';
-    const baseVersion = item ? item._version : 0;
-    try {
-      await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed, createdBy, reason }) }, { _baseVersion: baseVersion });
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        showConflictModal(err.conflict, { storage: trimmed, createdBy, reason }, () => {
-          load();
-        }, { path: '/api/items/'+id, options: { method:'PATCH', body: JSON.stringify({ storage: trimmed, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-        return;
-      }
-      alert(err.message || '操作失败');
-      return;
-    }
+    await api('/api/items/'+id, { method:'PATCH', body: JSON.stringify({ storage: trimmed }) });
+    await load();
   });
   document.querySelectorAll('[data-compare]').forEach(cb => cb.onchange = () => {
     const id = cb.dataset.compare;
@@ -651,15 +354,6 @@ function bindCardEvents() {
     }
     updateCompareButton();
   });
-  document.querySelectorAll('[data-version-history]').forEach(btn => btn.onclick = () => {
-    openVersionHistory(btn.dataset.versionHistory);
-  });
-  document.querySelectorAll('[data-revise]').forEach(btn => btn.onclick = () => {
-    openRevisionModal(btn.dataset.revise);
-  });
-  document.querySelectorAll('[data-lifecycle]').forEach(btn => btn.onclick = () => {
-    openLifecycleDetail(btn.dataset.lifecycle);
-  });
 }
 
 function renderStorageKanban() {
@@ -671,9 +365,8 @@ function renderStorageKanban() {
   kanbanCards.parentElement.style.display = '';
   kanbanEmpty.style.display = 'none';
   kanbanCards.innerHTML = storageKanban.map(group => {
-    const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
-    const countBadges = stagesDynamic.map(s =>
-      '<div class="kanban-badge ' + statusClass(s) + '">' +
+    const countBadges = stages.map(s =>
+      '<div class="kanban-badge ' + (s === '待试磨' ? 'pending' : s === '已试磨' ? 'done' : 'watch') + '">' +
         '<span>' + s + '</span>' +
         '<strong>' + (group.counts[s] || 0) + '</strong>' +
       '</div>'
@@ -731,22 +424,12 @@ function renderStorageDetail() {
 }
 
 function render() {
-  const savedBatch = batchFilter.value;
-  const savedStatus = statusFilter.value;
   batchSelect.innerHTML = '<option value="">无（单独录入）</option>' + batches.map(b => '<option value="'+b.id+'">'+b.code+' · '+b.smokeSource+'</option>').join('');
   batchFilter.innerHTML = '<option value="">全部批次</option>' + batches.map(b => '<option value="'+b.id+'">'+b.code+' · '+b.smokeSource+'</option>').join('');
-  batchFilter.value = savedBatch;
-  statusFilter.value = savedStatus;
   itemSelect.innerHTML = items.map(item => '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.name || item.shipType || item.source || item.plateSize || item.smokeSource || '')+'</option>').join('');
   templateSelect.innerHTML = '<option value="">-- 手动填写 --</option>' + templates.map(t => '<option value="'+t.id+'" '+(t.isDefault?'selected':'')+'>'+t.name+(t.isDefault?' (默认)':'')+'</option>').join('');
 
-  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
-  const stats = Object.fromEntries(stagesDynamic.map(s => [s, 0]));
-  for (const item of items) {
-    const status = item.status || '未指定';
-    if (stats[status] === undefined) stats[status] = 0;
-    stats[status] += 1;
-  }
+  const stats = Object.fromEntries(stages.map(s => [s, items.filter(i => i.status === s).length]));
   statsEl.innerHTML = Object.entries(stats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
 
   const batchStats = { '批次总数': batches.length, '墨锭总数': items.length, '已完成批次': batches.filter(b => { const it = items.filter(i => i.batchId === b.id); return it.length > 0 && it.every(i => i.status === '已试磨'); }).length };
@@ -793,8 +476,11 @@ function render() {
     batchEmpty.style.display = 'none';
     batchTable.innerHTML = batches.map(b => {
       const prog = b.progress || { total: 0, tested: 0, percent: 0 };
-      return '<tr><td class="batch-code">'+b.code+'</td><td>'+b.smokeSource+'</td><td>'+b.receiveDate+'</td><td>'+prog.total+' 件</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress" style="flex:1;min-width:80px"><div class="progress-bar" style="width:'+prog.percent+'%"></div></div><span class="meta">'+prog.tested+'/'+prog.total+' ('+prog.percent+'%)</span></div></td><td class="meta">'+(b.note || '-')+'</td></tr>';
+      return '<tr class="batch-row" data-batch-id="' + b.id + '"><td class="batch-code">' + b.code + '</td><td>' + b.smokeSource + '</td><td>' + b.receiveDate + '</td><td>' + prog.total + ' 件</td><td><div style="display:flex;align-items:center;gap:8px"><div class="progress" style="flex:1;min-width:80px"><div class="progress-bar" style="width:' + prog.percent + '%"></div></div><span class="meta">' + prog.tested + '/' + prog.total + ' (' + prog.percent + '%)</span></div></td><td class="meta">' + (b.note || '-') + '</td></tr>';
     }).join('');
+    document.querySelectorAll('.batch-row').forEach(row => {
+      row.onclick = () => openBatchDrawer(row.dataset.batchId);
+    });
   }
 
   if (templates.length === 0) {
@@ -806,166 +492,8 @@ function render() {
     templateTable.innerHTML = templates.map(t => {
       return '<tr><td>'+(t.isDefault?'<span class="pill gold">默认</span> ':'')+t.name+'</td><td>'+(t.paper||'-')+'</td><td>'+(t.water||'-')+'</td><td>'+(t.grindingTime||'-')+'</td><td>'+(t.speed||'-')+'</td><td class="meta">'+(t.observationPoints||'-')+'</td><td><div style="display:flex;gap:6px"><button class="secondary" data-default="'+t.id+'" '+(t.isDefault?'disabled style="opacity:0.5"':'')+'>设为默认</button><button class="secondary" style="background:var(--warn)" data-delete="'+t.id+'">删除</button></div></td></tr>';
     }).join('');
-    document.querySelectorAll('[data-default]').forEach(btn => btn.onclick = async () => {
-      const id = btn.dataset.default;
-      const tpl = templates.find(t => t.id === id);
-      const baseVersion = tpl ? tpl._version : 0;
-      try {
-        await api('/api/templates/'+id+'/default', { method:'POST' }, { _baseVersion: baseVersion });
-        await load();
-      } catch(err) {
-        if (err.conflict) {
-          showConflictModal(err.conflict, {}, () => {
-            load();
-          }, { path: '/api/templates/'+id+'/default', options: { method:'POST' }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-          return;
-        }
-        alert(err.message || '操作失败');
-      }
-    });
-    document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = async () => {
-      if (!confirm('确定删除此模板？')) return;
-      const id = btn.dataset.delete;
-      const tpl = templates.find(t => t.id === id);
-      const baseVersion = tpl ? tpl._version : 0;
-      const path = '/api/templates/'+id;
-      const options = { method:'DELETE', body: JSON.stringify({}) };
-      try {
-        await api(path, options, { _baseVersion: baseVersion });
-        await load();
-      } catch(err) {
-        if (err.conflict) {
-          if (err.conflict.type === 'delete_conflict') {
-            showDeleteConflictModal(err.conflict, () => load(), { path, options, baseVersion, onSuccess: () => load() });
-          } else {
-            showConflictModal(err.conflict, {}, () => load(), { path, options, baseVersion, onSuccess: () => load() });
-          }
-          return;
-        }
-        alert(err.message || '操作失败');
-      }
-    });
-  }
-
-  const scoringStatsEl = document.querySelector('#scoringStats');
-  const scoringRuleTable = document.querySelector('#scoringRuleTable tbody');
-  const scoringEmpty = document.querySelector('#scoringEmpty');
-  const scoringCoverageEl = document.querySelector('#scoringCoverage');
-  if (scoringStatsEl) {
-    const scStats = { '规则总数': scoringRules.length, '覆盖分数': scoringCoverage ? (scoringCoverage.coveragePercent + '%') : '0%' };
-    scoringStatsEl.innerHTML = Object.entries(scStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
-  }
-  if (scoringCoverageEl) {
-    if (scoringCoverage) {
-      let covHtml = '<div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">';
-      covHtml += '<div><strong>分数覆盖率：</strong>' + scoringCoverage.coveragePercent + '%（覆盖 ' + scoringCoverage.totalCoverage + '/101 个分值）</div>';
-      if (scoringCoverage.hasFullCoverage) {
-        covHtml += '<span class="pill done">覆盖完整</span>';
-      } else {
-        const gapDesc = scoringCoverage.gaps.map(([a, b]) => a === b ? a : (a + '-' + b)).join('、');
-        covHtml += '<span class="pill warn">存在空白区间：' + gapDesc + '</span>';
-      }
-      covHtml += '</div>';
-      scoringCoverageEl.innerHTML = covHtml;
-    }
-  }
-  if (scoringRuleTable) {
-    if (scoringRules.length === 0) {
-      scoringRuleTable.parentElement.style.display = 'none';
-      if (scoringEmpty) scoringEmpty.style.display = '';
-    } else {
-      scoringRuleTable.parentElement.style.display = '';
-      if (scoringEmpty) scoringEmpty.style.display = 'none';
-      scoringRuleTable.innerHTML = scoringRules.map((r, idx) => {
-        const statusCls = statusClass(r.resultStatus);
-        return '<tr>' +
-          '<td style="white-space:nowrap">' +
-            '<button class="secondary" data-sr-up="'+r.id+'" '+(idx===0?'disabled style="opacity:0.5"':'')+'>↑</button> ' +
-            '<button class="secondary" data-sr-down="'+r.id+'" '+(idx===scoringRules.length-1?'disabled style="opacity:0.5"':'')+'>↓</button> ' +
-            '<strong>#'+(r.order ?? idx)+'</strong>' +
-          '</td>' +
-          '<td><strong>'+escapeHtml(r.name)+'</strong></td>' +
-          '<td><code>'+r.minScore+' - '+r.maxScore+'</code></td>' +
-          '<td><span class="pill '+statusCls+'">'+r.resultStatus+'</span></td>' +
-          '<td class="meta">'+escapeHtml(r.hintText || '-')+'</td>' +
-          '<td><div style="display:flex;gap:6px">' +
-            '<button class="secondary gold" data-sr-edit="'+r.id+'">编辑</button>' +
-            '<button class="secondary" style="background:var(--warn)" data-sr-delete="'+r.id+'">删除</button>' +
-          '</div></td>' +
-        '</tr>';
-      }).join('');
-      document.querySelectorAll('[data-sr-up]').forEach(btn => btn.onclick = async () => {
-        const id = btn.dataset.srUp;
-        const idx = scoringRules.findIndex(r => r.id === id);
-        if (idx <= 0) return;
-        const orders = {};
-        scoringRules.forEach((r, i) => {
-          if (i === idx - 1) orders[r.id] = idx;
-          else if (i === idx) orders[r.id] = idx - 1;
-          else orders[r.id] = r.order ?? i;
-        });
-        const payload = { orders };
-        try {
-          await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify(payload) });
-          await load();
-        } catch(err) {
-          if (err.conflict) {
-            showConflictModal(err.conflict, payload, () => {
-              load();
-            }, { path: '/api/scoring-rules/reorder', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-            return;
-          }
-          alert(err.message || '操作失败');
-        }
-      });
-      document.querySelectorAll('[data-sr-down]').forEach(btn => btn.onclick = async () => {
-        const id = btn.dataset.srDown;
-        const idx = scoringRules.findIndex(r => r.id === id);
-        if (idx < 0 || idx >= scoringRules.length - 1) return;
-        const orders = {};
-        scoringRules.forEach((r, i) => {
-          if (i === idx + 1) orders[r.id] = idx;
-          else if (i === idx) orders[r.id] = idx + 1;
-          else orders[r.id] = r.order ?? i;
-        });
-        const payload = { orders };
-        try {
-          await api('/api/scoring-rules/reorder', { method:'POST', body: JSON.stringify(payload) });
-          await load();
-        } catch(err) {
-          if (err.conflict) {
-            showConflictModal(err.conflict, payload, () => {
-              load();
-            }, { path: '/api/scoring-rules/reorder', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-            return;
-          }
-          alert(err.message || '操作失败');
-        }
-      });
-      document.querySelectorAll('[data-sr-edit]').forEach(btn => btn.onclick = () => openScoringRuleEditor(btn.dataset.srEdit));
-      document.querySelectorAll('[data-sr-delete]').forEach(btn => btn.onclick = async () => {
-        if (!confirm('确定删除此评分规则？')) return;
-        const id = btn.dataset.srDelete;
-        const rule = scoringRules.find(r => r.id === id);
-        const baseVersion = rule ? rule._version : 0;
-        const path = '/api/scoring-rules/'+id;
-        const options = { method:'DELETE', body: JSON.stringify({}) };
-        try {
-          await api(path, options, { _baseVersion: baseVersion });
-          await load();
-        } catch(err) {
-          if (err.conflict) {
-            if (err.conflict.type === 'delete_conflict') {
-              showDeleteConflictModal(err.conflict, () => load(), { path, options, baseVersion, onSuccess: () => load() });
-            } else {
-              showConflictModal(err.conflict, {}, () => load(), { path, options, baseVersion, onSuccess: () => load() });
-            }
-            return;
-          }
-          alert(err.message || '操作失败');
-        }
-      });
-    }
+    document.querySelectorAll('[data-default]').forEach(btn => btn.onclick = async () => { await api('/api/templates/'+btn.dataset.default+'/default', { method:'POST' }); await load(); });
+    document.querySelectorAll('[data-delete]').forEach(btn => btn.onclick = async () => { if (confirm('确定删除此模板？')) { await api('/api/templates/'+btn.dataset.delete, { method:'DELETE' }); await load(); } });
   }
 
   renderStorageKanban();
@@ -973,26 +501,6 @@ function render() {
     renderStorageDetail();
   }
   updateCompareButton();
-
-  const lifecycleSelect = document.querySelector('#lifecycleItemSelect');
-  if (lifecycleSelect) {
-    const prevVal = lifecycleSelect.value;
-    lifecycleSelect.innerHTML = '<option value="">-- 请选择 --</option>' + items.map(item =>
-      '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.smokeSource || '')+' ['+(item.lifecycleState || '建档')+']</option>'
-    ).join('');
-    lifecycleSelect.value = prevVal;
-  }
-  const lifecycleStatsEl = document.querySelector('#lifecycleStats');
-  if (lifecycleStatsEl) {
-    const lcStats = {};
-    for (const s of LIFECYCLE_STATES) lcStats[s] = 0;
-    for (const item of items) {
-      const ls = item.lifecycleState || '建档';
-      if (lcStats[ls] === undefined) lcStats[ls] = 0;
-      lcStats[ls]++;
-    }
-    lifecycleStatsEl.innerHTML = Object.entries(lcStats).map(([k,v]) => '<div class="stat"><span>'+k+'</span><strong>'+v+'</strong></div>').join('');
-  }
 }
 
 function cardHtml(item, showStorageEdit) {
@@ -1011,9 +519,6 @@ function cardHtml(item, showStorageEdit) {
   }
   const taskCount = itemTasks.length;
   const taskCountBadge = taskCount > 0 ? '<span class="pill task-count-badge">历史 '+taskCount+' 次</span>' : '';
-  const versionCount = (item.versions && item.versions.length) || 0;
-  const currentVer = item.currentVersion || 1;
-  const versionBadge = versionCount > 0 ? '<span class="pill ongoing">v'+currentVer+' / 共'+versionCount+'版</span>' : '';
   const taskHistory = itemTasks.length > 0
     ? '<div class="task-history"><div class="task-history-title">任务历史</div>' +
         itemTasks.slice().sort((a,b) => b.createdAt.localeCompare(a.createdAt)).map(t =>
@@ -1031,15 +536,7 @@ function cardHtml(item, showStorageEdit) {
     ? '<button class="secondary gold" data-storage-edit="'+itemId+'" style="margin-top:4px">修改存放位置</button>'
     : '';
   const checkboxHtml = '<label class="card-checkbox"><input type="checkbox" data-compare="'+itemId+'" '+(isSelected?'checked':'')+'><span>加入对比</span></label>';
-  const versionActions = '<div class="version-card-actions">' +
-    '<button class="secondary" data-version-history="'+itemId+'">版本历史（'+versionCount+'）</button>' +
-    '<button class="secondary gold" data-revise="'+itemId+'">修订记录</button>' +
-  '</div>';
-  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
-  const itemStatusClass = statusClass(item.status);
-  const lifecycleState = item.lifecycleState || '';
-  const lifecycleBadge = lifecycleState ? '<span class="pill lifecycle ' + statusClass(lifecycleState) + '">生命周期：' + lifecycleState + '</span>' : '';
-  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+itemStatusClass+'">'+item.status+'</span>'+lifecycleBadge+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stagesDynamic.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+'<button class="secondary gold" data-lifecycle="'+itemId+'" style="margin-top:6px">生命周期追踪</button>'+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill">'+item.status+'</span>'+batchBadge+storageBadge+taskCountBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stages.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
 }
 
 function getAssignees() {
@@ -1146,34 +643,22 @@ function bindTaskEvents() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
     const goToTest = confirm('任务完成！\n\n点击「确定」跳转到试磨记录页面录入数据。\n点击「取消」稍后补录试磨数据。');
-    const baseVersion = task ? task._version : 0;
-    const payload = {};
-    try {
-      await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
-      if (goToTest) {
-        itemSelect.value = task.itemId;
-        const defaultTpl = templates.find(t => t.isDefault);
-        if (defaultTpl) {
-          templateSelect.value = defaultTpl.id;
-          applyTemplate(defaultTpl.id);
-        }
-        switchTab('items');
-        setTimeout(() => {
-          const actionFormEl = document.querySelector('#actionForm');
-          if (actionFormEl) actionFormEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }, 100);
-        return;
+    await api('/api/tasks/'+id+'/complete', { method:'POST', body: JSON.stringify({}) });
+    if (goToTest) {
+      itemSelect.value = task.itemId;
+      const defaultTpl = templates.find(t => t.isDefault);
+      if (defaultTpl) {
+        templateSelect.value = defaultTpl.id;
+        applyTemplate(defaultTpl.id);
       }
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        showConflictModal(err.conflict, payload, () => {
-          load();
-        }, { path: '/api/tasks/'+id+'/complete', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-        return;
-      }
-      alert(err.message || '操作失败');
+      switchTab('items');
+      setTimeout(() => {
+        const actionFormEl = document.querySelector('#actionForm');
+        if (actionFormEl) actionFormEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      }, 100);
+      return;
     }
+    await load();
   });
 
   document.querySelectorAll('[data-task-reschedule]').forEach(btn => btn.onclick = async () => {
@@ -1182,136 +667,33 @@ function bindTaskEvents() {
     if (!task) return;
     const newDate = prompt('输入新的计划日期', task.scheduledDate);
     if (!newDate) return;
-    const baseVersion = task ? task._version : 0;
-    const payload = { scheduledDate: newDate };
-    try {
-      await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        showConflictModal(err.conflict, payload, () => {
-          load();
-        }, { path: '/api/tasks/'+id, options: { method:'PATCH', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-        return;
-      }
-      alert(err.message || '操作失败');
-    }
+    await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify({ scheduledDate: newDate }) });
+    await load();
   });
 
   document.querySelectorAll('[data-task-start]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.taskStart;
-    const task = tasks.find(t => t.id === id);
-    const baseVersion = task ? task._version : 0;
-    const payload = { status: '进行中' };
-    try {
-      await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        showConflictModal(err.conflict, payload, () => {
-          load();
-        }, { path: '/api/tasks/'+id, options: { method:'PATCH', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => load() });
-        return;
-      }
-      alert(err.message || '操作失败');
-    }
+    await api('/api/tasks/'+id, { method:'PATCH', body: JSON.stringify({ status: '进行中' }) });
+    await load();
   });
 
   document.querySelectorAll('[data-task-delete]').forEach(btn => btn.onclick = async () => {
     const id = btn.dataset.taskDelete;
     if (!confirm('确定删除此任务？')) return;
-    const task = tasks.find(t => t.id === id);
-    const baseVersion = task ? task._version : 0;
-    const path = '/api/tasks/'+id;
-    const options = { method:'DELETE', body: JSON.stringify({}) };
-    try {
-      await api(path, options, { _baseVersion: baseVersion });
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        if (err.conflict.type === 'delete_conflict') {
-          showDeleteConflictModal(err.conflict, () => load(), { path, options, baseVersion, onSuccess: () => load() });
-        } else {
-          showConflictModal(err.conflict, {}, () => load(), { path, options, baseVersion, onSuccess: () => load() });
-        }
-        return;
-      }
-      alert(err.message || '操作失败');
-    }
+    await api('/api/tasks/'+id, { method:'DELETE' });
+    await load();
   });
-}
-
-function updateSyncStatus() {
-  const bar = document.querySelector('#syncStatusBar');
-  if (!bar) return;
-  const connected = window.DataSync ? window.DataSync.isConnected() : false;
-  bar.style.display = '';
-  bar.className = 'sync-status-bar ' + (connected ? 'connected' : 'disconnected');
-  document.querySelector('#syncStatusIcon').textContent = connected ? '✓' : '⚠';
-  document.querySelector('#syncStatusText').textContent = connected ? '已连接 · 实时同步' : '连接断开 · 使用本地数据';
-}
-
-function initDataSync() {
-  if (!window.DataSync) return;
-  const store = window.DataSync.getStore();
-  window.DataSync.subscribe((event) => {
-    const { collection, changeType, recordId, record } = event;
-    let needsReload = false;
-    switch(collection) {
-      case 'items':
-      case 'batches':
-      case 'templates':
-      case 'tasks':
-      case 'scoringRules':
-      case 'importBatches':
-      case 'views':
-        needsReload = true;
-        break;
-    }
-    if (needsReload) {
-      showSyncNotification(event);
-      setTimeout(() => load(), 300);
-    }
-  });
-
-  setInterval(updateSyncStatus, 5000);
-  updateSyncStatus();
-}
-
-function showSyncNotification(event) {
-  const labels = {
-    items: '墨锭', batches: '批次', templates: '方案模板',
-    tasks: '任务', scoringRules: '评分规则', importBatches: '导入批次',
-    views: '常用视图'
-  };
-  const actionLabels = { created: '新增', updated: '更新', deleted: '删除', batch_updated: '批量更新' };
-  const name = labels[event.collection] || event.collection;
-  const action = actionLabels[event.changeType] || event.changeType;
-  const bar = document.querySelector('#syncStatusBar');
-  if (bar) {
-    bar.className = 'sync-status-bar syncing';
-    document.querySelector('#syncStatusIcon').textContent = '🔄';
-    document.querySelector('#syncStatusText').textContent = `${action} ${name}数据，正在刷新...`;
-    setTimeout(updateSyncStatus, 1500);
-  }
 }
 
 async function load() {
-  [items, batches, templates, storageKanban, tasks, todayTasksData, scoringData, views] = await Promise.all([
+  [items, batches, templates, storageKanban, tasks, todayTasksData] = await Promise.all([
     api('/api/items'),
     api('/api/batches'),
     api('/api/templates'),
     api('/api/storage'),
     api('/api/tasks'),
-    api('/api/tasks/today'),
-    api('/api/scoring-rules'),
-    api('/api/views')
+    api('/api/tasks/today')
   ]);
-  scoringRules = scoringData.rules || [];
-  scoringCoverage = scoringData.coverage || null;
-  scoringStatuses = scoringData.statuses || [];
-  renderForms();
-  renderViews();
   render();
   const defaultTpl = templates.find(t => t.isDefault);
   if (defaultTpl && templateSelect.value === defaultTpl.id) {
@@ -1321,79 +703,29 @@ async function load() {
 
 createForm.onsubmit = async event => {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(createForm).entries());
-  try {
-    await api('/api/items', { method:'POST', body: JSON.stringify(payload) });
-    createForm.reset();
-    await load();
-  } catch(err) {
-    if (err.conflict) {
-      showConflictModal(err.conflict, payload, () => {
-        createForm.reset();
-        load();
-      }, { path: '/api/items', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { createForm.reset(); load(); } });
-      return;
-    }
-    alert(err.message || '操作失败');
-  }
+  await api('/api/items', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(createForm).entries())) });
+  createForm.reset();
+  await load();
 };
 actionForm.onsubmit = async event => {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(actionForm).entries());
-  const id = itemSelect.value;
-  const currentItem = items.find(x => x.id === id || x.code === id);
-  const baseVersion = currentItem ? currentItem._version : 0;
-  try {
-    await api('/api/items/'+id+'/action', { method:'POST', body: JSON.stringify(payload) }, { _baseVersion: baseVersion });
-    actionForm.reset();
-    await load();
-  } catch(err) {
-    if (err.conflict) {
-      showConflictModal(err.conflict, payload, () => {
-        actionForm.reset();
-        load();
-      }, { path: '/api/items/'+id+'/action', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { actionForm.reset(); load(); } });
-      return;
-    }
-    alert(err.message || '操作失败');
-  }
+  await api('/api/items/'+itemSelect.value+'/action', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(actionForm).entries())) });
+  actionForm.reset();
+  await load();
 };
 batchForm.onsubmit = async event => {
   event.preventDefault();
-  const payload = Object.fromEntries(new FormData(batchForm).entries());
-  try {
-    await api('/api/batches', { method:'POST', body: JSON.stringify(payload) });
-    batchForm.reset();
-    await load();
-  } catch(err) {
-    if (err.conflict) {
-      showConflictModal(err.conflict, payload, () => {
-        batchForm.reset();
-        load();
-      }, { path: '/api/batches', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { batchForm.reset(); load(); } });
-      return;
-    }
-    alert(err.message || '操作失败');
-  }
+  await api('/api/batches', { method:'POST', body: JSON.stringify(Object.fromEntries(new FormData(batchForm).entries())) });
+  batchForm.reset();
+  await load();
 };
 templateForm.onsubmit = async event => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(templateForm).entries());
   data.isDefault = templateForm.querySelector('[name="isDefault"]').checked;
-  try {
-    await api('/api/templates', { method:'POST', body: JSON.stringify(data) });
-    templateForm.reset();
-    await load();
-  } catch(err) {
-    if (err.conflict) {
-      showConflictModal(err.conflict, data, () => {
-        templateForm.reset();
-        load();
-      }, { path: '/api/templates', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { templateForm.reset(); load(); } });
-      return;
-    }
-    alert(err.message || '操作失败');
-  }
+  await api('/api/templates', { method:'POST', body: JSON.stringify(data) });
+  templateForm.reset();
+  await load();
 };
 templateSelect.onchange = () => {
   if (templateSelect.value) {
@@ -1402,184 +734,6 @@ templateSelect.onchange = () => {
     actionForm.reset();
   }
 };
-const scoringRuleForm = document.querySelector('#scoringRuleForm');
-let editingScoringRuleId = null;
-const srResultStatusCustomCheck = document.querySelector('#srResultStatusCustomCheck');
-const srResultStatusCustom = document.querySelector('#srResultStatusCustom');
-if (srResultStatusCustomCheck) {
-  srResultStatusCustomCheck.onchange = () => {
-    if (srResultStatusCustom) {
-      srResultStatusCustom.style.display = srResultStatusCustomCheck.checked ? '' : 'none';
-      const srSelect = document.querySelector('#srResultStatus');
-      if (srSelect) srSelect.disabled = srResultStatusCustomCheck.checked;
-      if (srResultStatusCustomCheck.checked && !srResultStatusCustom.value) {
-        srResultStatusCustom.focus();
-      }
-    }
-  };
-}
-if (scoringRuleForm) {
-  scoringRuleForm.onsubmit = async event => {
-    event.preventDefault();
-    const fd = new FormData(scoringRuleForm);
-    let resultStatusValue = '';
-    if (srResultStatusCustomCheck && srResultStatusCustomCheck.checked) {
-      resultStatusValue = fd.get('resultStatusCustom')?.toString().trim() || '';
-    } else {
-      resultStatusValue = fd.get('resultStatus')?.toString() || '';
-    }
-    const data = {
-      name: fd.get('name')?.toString() || '',
-      minScore: Number(fd.get('minScore')),
-      maxScore: Number(fd.get('maxScore')),
-      resultStatus: resultStatusValue,
-      hintText: fd.get('hintText')?.toString() || '',
-      order: Number(fd.get('order') || 0)
-    };
-    try {
-      if (editingScoringRuleId) {
-        const currentRule = scoringRules.find(r => r.id === editingScoringRuleId);
-        const baseVersion = currentRule ? currentRule._version : 0;
-        try {
-          await api('/api/scoring-rules/' + editingScoringRuleId, { method:'PATCH', body: JSON.stringify(data) }, { _baseVersion: baseVersion });
-        } catch(err) {
-          if (err.conflict) {
-            showConflictModal(err.conflict, data, () => {
-              editingScoringRuleId = null;
-              scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
-              scoringRuleForm.querySelector('button').textContent = '保存规则';
-              scoringRuleForm.reset();
-              if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-              if (srResultStatusCustom) {
-                srResultStatusCustom.style.display = 'none';
-                srResultStatusCustom.value = '';
-              }
-              const srSelect = document.querySelector('#srResultStatus');
-              if (srSelect) srSelect.disabled = false;
-              document.querySelector('#srOrder').value = '0';
-              load();
-            }, { path: '/api/scoring-rules/' + editingScoringRuleId, options: { method:'PATCH', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-              editingScoringRuleId = null;
-              scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
-              scoringRuleForm.querySelector('button').textContent = '保存规则';
-              scoringRuleForm.reset();
-              if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-              if (srResultStatusCustom) {
-                srResultStatusCustom.style.display = 'none';
-                srResultStatusCustom.value = '';
-              }
-              const srSelect = document.querySelector('#srResultStatus');
-              if (srSelect) srSelect.disabled = false;
-              document.querySelector('#srOrder').value = '0';
-              load();
-            } });
-            return;
-          }
-          throw err;
-        }
-        editingScoringRuleId = null;
-        scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
-        scoringRuleForm.querySelector('button').textContent = '保存规则';
-      } else {
-        await api('/api/scoring-rules', { method:'POST', body: JSON.stringify(data) });
-      }
-      scoringRuleForm.reset();
-      if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-      if (srResultStatusCustom) {
-        srResultStatusCustom.style.display = 'none';
-        srResultStatusCustom.value = '';
-      }
-      const srSelect = document.querySelector('#srResultStatus');
-      if (srSelect) srSelect.disabled = false;
-      document.querySelector('#srOrder').value = '0';
-      await load();
-    } catch(err) {
-      if (err.conflict) {
-        showConflictModal(err.conflict, data, () => {
-          scoringRuleForm.reset();
-          if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-          if (srResultStatusCustom) {
-            srResultStatusCustom.style.display = 'none';
-            srResultStatusCustom.value = '';
-          }
-          const srSelect = document.querySelector('#srResultStatus');
-          if (srSelect) srSelect.disabled = false;
-          document.querySelector('#srOrder').value = '0';
-          load();
-        }, { path: '/api/scoring-rules', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-          scoringRuleForm.reset();
-          if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-          if (srResultStatusCustom) {
-            srResultStatusCustom.style.display = 'none';
-            srResultStatusCustom.value = '';
-          }
-          const srSelect = document.querySelector('#srResultStatus');
-          if (srSelect) srSelect.disabled = false;
-          document.querySelector('#srOrder').value = '0';
-          load();
-        } });
-        return;
-      }
-      const msg = err && err.message ? err.message : '操作失败';
-      const detail = err && err.errors ? '\n' + err.errors.join('\n') : '';
-      alert(msg + detail);
-    }
-  };
-}
-const srTestBtn = document.querySelector('#srTestBtn');
-if (srTestBtn) {
-  srTestBtn.onclick = async () => {
-    const scoreInput = document.querySelector('#srTestScore');
-    const resultEl = document.querySelector('#srTestResult');
-    if (!scoreInput || !resultEl) return;
-    const score = Number(scoreInput.value);
-    if (isNaN(score) || score < 0 || score > 100) {
-      resultEl.innerHTML = '<span class="warn">请输入0-100之间的有效分数</span>';
-      return;
-    }
-    try {
-      const result = await api('/api/scoring-rules/preview?score=' + score);
-      if (result.match) {
-        resultEl.innerHTML = '分数 <strong>' + score + '</strong> 命中规则：<strong>' + escapeHtml(result.match.ruleName) + '</strong>（区间 ' + result.match.matchedRange + '）→ 状态：<span class="pill done">' + escapeHtml(result.match.resultStatus) + '</span>' + (result.match.hintText ? '<br><span class="meta">提示：' + escapeHtml(result.match.hintText) + '</span>' : '');
-      } else {
-        resultEl.innerHTML = '<span class="warn">分数 ' + score + ' 未匹配任何规则，状态将保持不变并记录规则警告日志。建议调整规则以覆盖该分值。</span>';
-      }
-    } catch(err) {
-      resultEl.innerHTML = '<span class="warn">测试失败：' + escapeHtml(err.message || '未知错误') + '</span>';
-    }
-  };
-}
-function openScoringRuleEditor(id) {
-  const rule = scoringRules.find(r => r.id === id);
-  if (!rule) return;
-  editingScoringRuleId = id;
-  document.querySelector('#srName').value = rule.name || '';
-  document.querySelector('#srMinScore').value = rule.minScore;
-  document.querySelector('#srMaxScore').value = rule.maxScore;
-  const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
-  const srSelect = document.querySelector('#srResultStatus');
-  const isPreset = (rule.resultStatus || '').trim() && stagesDynamic.includes(rule.resultStatus);
-  if (srSelect) {
-    srSelect.innerHTML = '<option value="">-- 选择或自定义 --</option>' + stagesDynamic.map(s => '<option>' + s + '</option>').join('');
-    srSelect.value = isPreset ? rule.resultStatus : '';
-    srSelect.disabled = !isPreset && (rule.resultStatus || '').trim();
-  }
-  if (srResultStatusCustomCheck) {
-    srResultStatusCustomCheck.checked = !isPreset && (rule.resultStatus || '').trim();
-  }
-  if (srResultStatusCustom) {
-    srResultStatusCustom.value = (!isPreset && (rule.resultStatus || '').trim()) ? rule.resultStatus : '';
-    srResultStatusCustom.style.display = (!isPreset && (rule.resultStatus || '').trim()) ? '' : 'none';
-  }
-  document.querySelector('#srHintText').value = rule.hintText || '';
-  document.querySelector('#srOrder').value = rule.order ?? 0;
-  const form = document.querySelector('#scoringRuleForm');
-  if (form) {
-    form.querySelector('h2').textContent = '编辑评分规则';
-    form.querySelector('button').textContent = '更新规则';
-    form.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
-}
 taskForm.onsubmit = async event => {
   event.preventDefault();
   const data = Object.fromEntries(new FormData(taskForm).entries());
@@ -1590,22 +744,8 @@ taskForm.onsubmit = async event => {
     document.querySelector('#taskDate').value = today;
     await load();
   } catch(err) {
-    if (err.conflict) {
-      showConflictModal(err.conflict, data, () => {
-        taskForm.reset();
-        const today = new Date().toISOString().slice(0,10);
-        document.querySelector('#taskDate').value = today;
-        load();
-      }, { path: '/api/tasks', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-        taskForm.reset();
-        const today = new Date().toISOString().slice(0,10);
-        document.querySelector('#taskDate').value = today;
-        load();
-      } });
-      return;
+      alert('创建失败：' + err.message);
     }
-    alert('创建失败：' + err.message);
-  }
 };
 taskStatusFilter.onchange = renderTasks;
 taskAssigneeFilter.onchange = renderTasks;
@@ -1619,16 +759,13 @@ taskFilterReset.onclick = () => {
   renderTasks();
 };
 document.querySelectorAll('.tab').forEach(tab => tab.onclick = () => switchTab(tab.dataset.tab));
-statusFilter.onchange = () => { currentViewId = null; renderViews(); render(); };
-batchFilter.onchange = () => { currentViewId = null; renderViews(); render(); };
-document.querySelector('#search').oninput = () => { currentViewId = null; renderViews(); render(); };
+statusFilter.onchange = render;
+batchFilter.onchange = render;
+document.querySelector('#search').oninput = render;
 storageStatusFilter.onchange = renderStorageDetail;
 storageSearch.oninput = renderStorageDetail;
 backToKanban.onclick = showKanbanView;
 document.querySelector('#reload').onclick = load;
-
-const saveViewBtn = document.querySelector('#saveViewBtn');
-if (saveViewBtn) saveViewBtn.onclick = saveCurrentAsView;
 
 const compareBtn = document.querySelector('#compareBtn');
 if (compareBtn) {
@@ -1653,651 +790,29 @@ if (clearCompareBtn) {
   };
 }
 
-let currentHistoryItemId = null;
-let currentDetailVersionData = null;
-
-function actionLabel(action) {
-  switch(action) {
-    case 'create': return { text: '创建', cls: 'create' };
-    case 'revise': return { text: '修订', cls: 'revise' };
-    case 'restore': return { text: '恢复', cls: 'restore' };
-    default: return { text: action || '操作', cls: 'revise' };
+drawerClose.onclick = closeBatchDrawer;
+batchDetailDrawer.addEventListener('click', (e) => {
+  if (e.target === batchDetailDrawer) {
+    closeBatchDrawer();
   }
-}
-
-function formatDate(isoStr) {
-  if (!isoStr) return '';
-  try {
-    const d = new Date(isoStr);
-    return d.getFullYear() + '-' +
-      String(d.getMonth()+1).padStart(2,'0') + '-' +
-      String(d.getDate()).padStart(2,'0') + ' ' +
-      String(d.getHours()).padStart(2,'0') + ':' +
-      String(d.getMinutes()).padStart(2,'0');
-  } catch(e) { return isoStr; }
-}
-
-function escapeHtml(str) {
-  if (str === null || str === undefined) return '';
-  return String(str).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
-}
-
-async function openVersionHistory(itemId) {
-  currentHistoryItemId = itemId;
-  const item = items.find(x => x.id === itemId || x.code === itemId);
-  if (!item) return;
-  document.querySelector('#versionHistoryTitle').textContent =
-    '版本历史 - ' + (item.code || item.id) + ' · ' + (item.smokeSource || '');
-  document.querySelector('#versionHistoryModal').style.display = 'flex';
-  document.querySelector('#versionHistoryList').innerHTML =
-    '<div class="empty">正在加载版本历史...</div>';
-  try {
-    const history = await api('/api/items/' + encodeURIComponent(itemId) + '/versions');
-    renderVersionHistoryList(history);
-  } catch(e) {
-    document.querySelector('#versionHistoryList').innerHTML =
-      '<div class="empty warn">加载失败：' + escapeHtml(e.message) + '</div>';
-  }
-}
-
-function renderVersionHistoryList(history) {
-  const listEl = document.querySelector('#versionHistoryList');
-  if (!history.versions || history.versions.length === 0) {
-    listEl.innerHTML = '<div class="empty">暂无版本记录</div>';
+});
+drawerStatusFilter.onchange = renderDrawerItems;
+drawerSearch.oninput = renderDrawerItems;
+drawerCreateTasksBtn.onclick = () => {
+  if (!currentBatchDetail) return;
+  createBatchTasksFromDrawer('待试磨');
+};
+drawerRetestBtn.onclick = () => {
+  if (!currentBatchDetail) return;
+  if (currentBatchDetail.suggestRetestCount === 0) {
+    alert('当前批次没有建议复测的墨锭。');
     return;
   }
-  const html = ['<div class="version-timeline">'];
-  for (const v of history.versions) {
-    const action = actionLabel(v.action);
-    const isCurrent = v.version === history.currentVersion;
-    const cls = ['version-item'];
-    if (isCurrent) cls.push('current');
-    if (v.action === 'restore') cls.push('restore');
-    html.push('<div class="' + cls.join(' ') + '" data-version="' + v.version + '">');
-    html.push('<div class="version-header">');
-    html.push('<div><span class="version-tag">v' + v.version + '</span>');
-    html.push('<span class="version-action ' + action.cls + '">' + action.text + '</span>');
-    if (isCurrent) html.push(' <span class="current-badge">当前版本</span>');
-    html.push('</div>');
-    if (v.parentVersion) {
-      html.push('<span class="meta">基于 v' + v.parentVersion + '</span>');
-    }
-    html.push('</div>');
-    html.push('<div class="version-meta">');
-    html.push('<span>🕒 ' + formatDate(v.createdAt) + '</span>');
-    html.push('<span>👤 ' + escapeHtml(v.createdBy || '未指定') + '</span>');
-    html.push('</div>');
-    html.push('<div class="version-reason">📝 ' + escapeHtml(v.reason || '无原因说明') + '</div>');
-    const s = v.snapshotSummary || {};
-    html.push('<div class="version-summary">');
-    html.push('<span class="vs-pill">状态: ' + escapeHtml(s.status || '-') + '</span>');
-    html.push('<span class="vs-pill">试磨记录: ' + (s.testCount || 0) + ' 条</span>');
-    html.push('<span class="vs-pill">操作日志: ' + (s.logCount || 0) + ' 条</span>');
-    if (s.latestScore !== null && s.latestScore !== undefined) {
-      html.push('<span class="vs-pill">最新评分: ' + s.latestScore + '</span>');
-    }
-    if (s.storage) html.push('<span class="vs-pill">存放: ' + escapeHtml(s.storage) + '</span>');
-    html.push('</div>');
-    if (v.changes && Object.keys(v.changes).length > 0 && v.action !== 'restore') {
-      html.push(renderChangesPreview(v.changes));
-    }
-    html.push('<div class="version-card-actions">');
-    html.push('<button class="secondary" data-view-version="' + v.version + '">查看详情</button>');
-    if (!isCurrent) {
-      html.push('<button class="secondary gold" data-restore-version="' + v.version + '">恢复此版本</button>');
-    }
-    html.push('</div>');
-    html.push('</div>');
-  }
-  html.push('</div>');
-  listEl.innerHTML = html.join('');
-  listEl.querySelectorAll('[data-view-version]').forEach(btn => btn.onclick = (e) => {
-    e.stopPropagation();
-    openVersionDetail(history.itemId || history.itemCode, Number(btn.dataset.viewVersion));
-  });
-  listEl.querySelectorAll('[data-restore-version]').forEach(btn => btn.onclick = (e) => {
-    e.stopPropagation();
-    doRestoreVersion(history.itemId || history.itemCode, Number(btn.dataset.restoreVersion));
-  });
-}
-
-function renderChangesPreview(changes) {
-  const html = ['<div class="changes-summary">'];
-  const fieldLabels = {
-    status: '状态', storage: '存放位置', smokeSource: '烟料',
-    glueRatio: '胶比例', ageYears: '存放年限', batchId: '批次'
-  };
-  for (const [key, val] of Object.entries(changes)) {
-    if (fieldLabels[key] && val.before !== undefined && val.after !== undefined) {
-      html.push('<div class="change-line">');
-      html.push('<span class="change-field">' + fieldLabels[key] + '</span>');
-      html.push('<span class="change-before">' + escapeHtml(JSON.stringify(val.before).replace(/^"|"$/g,'')) + '</span>');
-      html.push('<span class="change-arrow"> → </span>');
-      html.push('<span class="change-after">' + escapeHtml(JSON.stringify(val.after).replace(/^"|"$/g,'')) + '</span>');
-      html.push('</div>');
-    } else if (key === 'testsAdded' && Array.isArray(val)) {
-      html.push('<div class="change-line"><span class="change-field">试磨</span>');
-      html.push('<span class="change-after">+新增 ' + val.length + ' 条试磨记录</span></div>');
-    } else if (key === 'logsAdded' && Array.isArray(val)) {
-      html.push('<div class="change-line"><span class="change-field">日志</span>');
-      html.push('<span class="change-after">+新增 ' + val.length + ' 条操作日志</span></div>');
-    }
-  }
-  html.push('</div>');
-  return html.join('');
-}
-
-async function openVersionDetail(itemId, versionNum) {
-  currentDetailVersionData = { itemId, versionNum };
-  const item = items.find(x => x.id === itemId || x.code === itemId);
-  if (!item) return;
-  document.querySelector('#versionDetailTitle').textContent =
-    '版本详情 - v' + versionNum + ' · ' + (item.code || item.id);
-  document.querySelector('#versionDetailModal').style.display = 'flex';
-  document.querySelector('#versionDetailContent').innerHTML =
-    '<div class="empty">正在加载版本详情...</div>';
-  document.querySelector('#restoreVersionBtn').style.display = 'none';
-  try {
-    const detail = await api('/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum);
-    renderVersionDetail(detail);
-    const isCurrent = detail.version.version === detail.version;
-    const historyCurrent = (item.currentVersion);
-    document.querySelector('#restoreVersionBtn').style.display =
-      detail.version.version !== historyCurrent ? '' : 'none';
-  } catch(e) {
-    document.querySelector('#versionDetailContent').innerHTML =
-      '<div class="empty warn">加载失败：' + escapeHtml(e.message) + '</div>';
-  }
-}
-
-function renderVersionDetail(detail) {
-  const v = detail.version;
-  const snap = v.snapshot;
-  const content = document.querySelector('#versionDetailContent');
-  const action = actionLabel(v.action);
-  const isCurrent = detail.version;
-  let html = [];
-  html.push('<div class="version-info-header">');
-  html.push('<div class="row1">');
-  html.push('<div><span class="v-num">v' + v.version + '</span>');
-  html.push('<span class="version-action ' + action.cls + '">' + action.text + '</span></div>');
-  html.push('<div class="v-meta">');
-  html.push('<span>🕒 ' + formatDate(v.createdAt) + '</span>');
-  html.push('<span>👤 ' + escapeHtml(v.createdBy || '未指定') + '</span>');
-  if (v.parentVersion) html.push('<span>🔗 基于 v' + v.parentVersion + '</span>');
-  html.push('</div></div>');
-  html.push('<div class="v-reason">📝 ' + escapeHtml(v.reason || '无原因说明') + '</div>');
-  html.push('</div>');
-  html.push('<div class="detail-grid">');
-  html.push('<div class="detail-section"><h3>📋 基础信息</h3>');
-  const basics = [
-    ['状态', snap.status],
-    ['存放位置', snap.storage],
-    ['烟料来源', snap.smokeSource],
-    ['胶料比例', snap.glueRatio],
-    ['存放年限', snap.ageYears],
-    ['批次ID', snap.batchId]
-  ];
-  for (const [label, val] of basics) {
-    html.push('<div class="detail-row"><span class="detail-label">' + label + '</span>');
-    html.push('<span class="detail-value">' + escapeHtml(val ?? '-') + '</span></div>');
-  }
-  html.push('</div>');
-  html.push('<div class="detail-section"><h3>📊 试磨记录 (' + (snap.tests || []).length + ' 条)</h3>');
-  const tests = snap.tests || [];
-  if (tests.length === 0) {
-    html.push('<div class="meta">暂无试磨记录</div>');
-  } else {
-    for (let i = tests.length - 1; i >= Math.max(0, tests.length - 3); i--) {
-      const t = tests[i];
-      html.push('<div class="detail-row"><span class="detail-label">#' + (i+1) + ' 评分</span>');
-      html.push('<span class="detail-value"><strong>' + (t.score ?? '-') + '</strong></span></div>');
-      html.push('<div class="detail-row"><span class="detail-label">时间</span>');
-      html.push('<span class="detail-value">' + formatDate(t.at) + '</span></div>');
-      const extras = [t.paper, t.water, t.speed, t.colorLayer, t.sediment].filter(Boolean);
-      if (extras.length) {
-        html.push('<div class="detail-row"><span class="detail-label">参数</span>');
-        html.push('<span class="detail-value">' + escapeHtml(extras.join(' / ')) + '</span></div>');
-      }
-    }
-    if (tests.length > 3) {
-      html.push('<div class="meta" style="margin-top:6px">... 还有 ' + (tests.length-3) + ' 条历史记录</div>');
-    }
-  }
-  html.push('</div></div>');
-  html.push('<div class="detail-section" style="margin-bottom:14px"><h3>📝 操作日志 (' + (snap.logs || []).length + ' 条)</h3>');
-  const logs = (snap.logs || []).slice().reverse().slice(0, 10);
-  if (logs.length === 0) {
-    html.push('<div class="meta">暂无操作日志</div>');
-  } else {
-    for (const l of logs) {
-      html.push('<div class="detail-row"><span class="detail-label">' + formatDate(l.at) + ' · ' + escapeHtml(l.step || '') + '</span>');
-      html.push('<span class="detail-value">' + escapeHtml(l.note || '') + '</span></div>');
-    }
-  }
-  html.push('</div>');
-  if (v.changes && Object.keys(v.changes).length > 0 && v.action !== 'restore') {
-    html.push('<div class="diff-view"><h3 style="margin:0 0 10px;font-size:14px;color:var(--accent)">🔍 变更对比（与上一版本）</h3>');
-    html.push(renderDiffView(v.changes, detail.previousSnapshot, snap));
-    html.push('</div>');
-  }
-  content.innerHTML = html.join('');
-}
-
-function renderDiffView(changes, prevSnap, currSnap) {
-  const html = [];
-  const fieldLabels = {
-    status: '状态', storage: '存放位置', smokeSource: '烟料来源',
-    glueRatio: '胶料比例', ageYears: '存放年限', batchId: '批次'
-  };
-  const fieldKeys = ['status', 'storage', 'smokeSource', 'glueRatio', 'ageYears', 'batchId'];
-  let hasFieldDiff = false;
-  for (const k of fieldKeys) {
-    if (changes[k] && changes[k].before !== undefined) {
-      if (!hasFieldDiff) {
-        html.push('<div class="diff-row" style="font-weight:700;background:#f8faf6;border-radius:6px 6px 0 0">');
-        html.push('<div class="diff-field">字段</div><div>变更前</div><div>变更后</div></div>');
-        hasFieldDiff = true;
-      }
-      const before = JSON.stringify(changes[k].before).replace(/^"|"$/g,'');
-      const after = JSON.stringify(changes[k].after).replace(/^"|"$/g,'');
-      html.push('<div class="diff-row"><div class="diff-field">' + fieldLabels[k] + '</div>');
-      html.push('<div class="diff-old">' + escapeHtml(before || '(空)') + '</div>');
-      html.push('<div class="diff-new">' + escapeHtml(after || '(空)') + '</div></div>');
-    }
-  }
-  if (changes.testsAdded && changes.testsAdded.length) {
-    html.push('<div style="padding:10px 6px 4px"><strong style="color:var(--accent)">+ 新增试磨记录 (' + changes.testsAdded.length + ' 条)：</strong></div>');
-    for (const t of changes.testsAdded) {
-      html.push('<div class="diff-added-list" style="margin:4px 6px">• ' +
-        formatDate(t.at) + ' 评分<strong>' + (t.score ?? '-') + '</strong>' +
-        (t.paper ? ' · ' + t.paper : '') +
-        (t.water ? ' · ' + t.water : '') +
-        (t.speed ? ' · 速度:' + t.speed : '') +
-        '</div>');
-    }
-  }
-  if (changes.logsAdded && changes.logsAdded.length) {
-    html.push('<div style="padding:10px 6px 4px"><strong style="color:var(--accent)">+ 新增操作日志 (' + changes.logsAdded.length + ' 条)：</strong></div>');
-    for (const l of changes.logsAdded) {
-      html.push('<div class="diff-added-list" style="margin:4px 6px">• ' +
-        formatDate(l.at) + ' <strong>[' + (l.step || '') + ']</strong> ' +
-        (l.note || '') +
-        (typeof l.score === 'number' ? ' (评分:' + l.score + ')' : '') +
-        '</div>');
-    }
-  }
-  if (!html.length) html.push('<div class="meta">无字段级变更</div>');
-  return html.join('');
-}
-
-async function doRestoreVersion(itemId, versionNum) {
-  const item = items.find(x => x.id === itemId || x.code === itemId);
-  if (!item) return;
-  if (!confirm('确定要将 ' + (item.code || item.id) + ' 恢复到版本 v' + versionNum + ' 吗？\n\n此操作会创建一个新版本，不会删除历史记录。')) {
-    return;
-  }
-  const createdBy = prompt('请输入恢复操作人姓名：', '未指定用户') || '未指定用户';
-  const reason = prompt('请输入恢复原因：', '恢复至 v' + versionNum) || ('恢复至 v' + versionNum);
-  const baseVersion = item ? item._version : 0;
-  const payload = { createdBy, reason };
-  try {
-    const result = await api('/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum + '/restore', {
-      method: 'POST',
-      body: JSON.stringify(payload)
-    }, { _baseVersion: baseVersion });
-    alert('✓ 恢复成功！已创建新版本 v' + result.restoredVersion.version);
-    document.querySelector('#versionHistoryModal').style.display = 'none';
-    document.querySelector('#versionDetailModal').style.display = 'none';
-    await load();
-  } catch(e) {
-    if (e.conflict) {
-      showConflictModal(e.conflict, payload, () => {
-        document.querySelector('#versionHistoryModal').style.display = 'none';
-        document.querySelector('#versionDetailModal').style.display = 'none';
-        load();
-      }, { path: '/api/items/' + encodeURIComponent(itemId) + '/versions/' + versionNum + '/restore', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: e.conflict.baseVersion, onSuccess: () => {
-        document.querySelector('#versionHistoryModal').style.display = 'none';
-        document.querySelector('#versionDetailModal').style.display = 'none';
-        load();
-      } });
-      return;
-    }
-    alert('恢复失败：' + e.message);
-  }
-}
-
-function openRevisionModal(itemId) {
-  currentHistoryItemId = itemId;
-  const item = items.find(x => x.id === itemId || x.code === itemId);
-  if (!item) return;
-  document.querySelector('#revisionModalTitle').textContent =
-    '修订记录 - ' + (item.code || item.id) + ' · ' + (item.smokeSource || '');
-  const form = document.querySelector('#revisionForm');
-  form.reset();
-  const statusSel = document.querySelector('#revisionStatus');
-  statusSel.innerHTML = '<option value="">不修改</option>' + stages.map(s =>
-    '<option value="' + s + '" ' + (s === item.status ? 'selected' : '') + '>' + s + '</option>'
-  ).join('');
-  document.querySelector('#revisionStorage').value = item.storage || '';
-  document.querySelector('#revisionSmokeSource').value = item.smokeSource || '';
-  document.querySelector('#revisionGlueRatio').value = item.glueRatio || '';
-  document.querySelector('#revisionAgeYears').value = item.ageYears ?? '';
-  document.querySelector('#revisionModal').style.display = 'flex';
-}
-
-function closeAllModals() {
-  document.querySelector('#versionHistoryModal').style.display = 'none';
-  document.querySelector('#revisionModal').style.display = 'none';
-  document.querySelector('#versionDetailModal').style.display = 'none';
-  currentDetailVersionData = null;
-  currentHistoryItemId = null;
-}
-
-function bindVersionModalEvents() {
-  document.querySelector('#closeVersionHistory').onclick = () =>
-    document.querySelector('#versionHistoryModal').style.display = 'none';
-  document.querySelector('#closeRevisionModal').onclick = () =>
-    document.querySelector('#revisionModal').style.display = 'none';
-  document.querySelector('#closeVersionDetail').onclick = () =>
-    document.querySelector('#versionDetailModal').style.display = 'none';
-  document.querySelector('#cancelRevisionBtn').onclick = () =>
-    document.querySelector('#revisionModal').style.display = 'none';
-  document.querySelector('#cancelVersionDetailBtn').onclick = () =>
-    document.querySelector('#versionDetailModal').style.display = 'none';
-  document.querySelectorAll('.modal-overlay').forEach(overlay => {
-    overlay.onclick = (e) => {
-      if (e.target === overlay) overlay.style.display = 'none';
-    };
-  });
-  document.querySelector('#restoreVersionBtn').onclick = () => {
-    if (currentDetailVersionData) {
-      doRestoreVersion(currentDetailVersionData.itemId, currentDetailVersionData.versionNum);
-    }
-  };
-  document.querySelector('#revisionForm').onsubmit = async (event) => {
-    event.preventDefault();
-    if (!currentHistoryItemId) return;
-    const form = event.target;
-    const fd = new FormData(form);
-    const createdBy = fd.get('createdBy');
-    const reason = fd.get('reason');
-    if (!createdBy || !createdBy.toString().trim()) {
-      alert('请输入修订人姓名');
-      return;
-    }
-    if (!reason || !reason.toString().trim()) {
-      alert('请输入修订原因');
-      return;
-    }
-    const updates = {};
-    let hasUpdates = false;
-    if (fd.get('status') && fd.get('status').toString().trim()) {
-      updates.status = fd.get('status').toString();
-      hasUpdates = true;
-    }
-    const optionalStrFields = [
-      ['storage', 'revisionStorage'],
-      ['smokeSource', 'revisionSmokeSource'],
-      ['glueRatio', 'revisionGlueRatio']
-    ];
-    const item = items.find(x => x.id === currentHistoryItemId || x.code === currentHistoryItemId);
-    for (const [field, inputId] of optionalStrFields) {
-      const el = document.getElementById(inputId);
-      if (el && el.value.trim() !== '' && item && el.value !== (item[field] || '')) {
-        updates[field] = el.value.trim();
-        hasUpdates = true;
-      }
-    }
-    const ageEl = document.getElementById('revisionAgeYears');
-    if (ageEl && ageEl.value !== '' && item) {
-      const ageVal = Number(ageEl.value);
-      if (ageVal !== (item.ageYears ?? null)) {
-        updates.ageYears = isNaN(ageVal) ? null : ageVal;
-        hasUpdates = true;
-      }
-    }
-    let appendLog = null;
-    if (fd.get('logStep') && fd.get('logStep').toString().trim()) {
-      appendLog = {
-        step: fd.get('logStep').toString(),
-        note: (fd.get('logNote') || '').toString()
-      };
-    }
-    let appendTest = null;
-    const testFields = ['paper','water','speed','colorLayer','sediment','score'];
-    let hasTestData = false;
-    const testObj = {};
-    for (const tf of testFields) {
-      const idName = 'revision' + tf.charAt(0).toUpperCase() + tf.slice(1);
-      const el = document.getElementById(idName);
-      if (el && el.value.trim() !== '') {
-        testObj[tf] = tf === 'score' ? Number(el.value) : el.value.trim();
-        hasTestData = true;
-      }
-    }
-    if (hasTestData) appendTest = testObj;
-    if (!hasUpdates && !appendLog && !appendTest) {
-      alert('未检测到任何变更内容，请至少修改一个字段、追加日志或试磨记录。');
-      return;
-    }
-    const payload = {
-      createdBy: createdBy.toString().trim(),
-      reason: reason.toString().trim()
-    };
-    if (hasUpdates) payload.updates = updates;
-    if (appendLog) payload.appendLog = appendLog;
-    if (appendTest) payload.appendTest = appendTest;
-    const currentItem = items.find(x => x.id === currentHistoryItemId || x.code === currentHistoryItemId);
-    const baseVersion = currentItem ? currentItem._version : 0;
-    try {
-      document.querySelector('#submitRevisionBtn').disabled = true;
-      document.querySelector('#submitRevisionBtn').textContent = '提交中...';
-      let result;
-      try {
-        result = await api('/api/items/' + encodeURIComponent(currentHistoryItemId) + '/versions', {
-          method: 'POST',
-          body: JSON.stringify(payload)
-        }, { _baseVersion: baseVersion });
-      } catch(e) {
-        if (e.conflict) {
-          showConflictModal(e.conflict, payload, (finalResult) => {
-            alert('✓ 修订成功！已创建新版本 v' + finalResult.version.version);
-            document.querySelector('#revisionModal').style.display = 'none';
-            document.querySelector('#submitRevisionBtn').disabled = false;
-            document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
-            load();
-          }, { path: '/api/items/' + encodeURIComponent(currentHistoryItemId) + '/versions', options: { method:'POST', body: JSON.stringify(payload) }, baseVersion: e.conflict.baseVersion, onSuccess: (finalResult) => {
-            alert('✓ 修订成功！已创建新版本 v' + finalResult.version.version);
-            document.querySelector('#revisionModal').style.display = 'none';
-            document.querySelector('#submitRevisionBtn').disabled = false;
-            document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
-            load();
-          } });
-          document.querySelector('#submitRevisionBtn').disabled = false;
-          document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
-          return;
-        }
-        throw e;
-      }
-      alert('✓ 修订成功！已创建新版本 v' + result.version.version);
-      document.querySelector('#revisionModal').style.display = 'none';
-      await load();
-    } catch(e) {
-      alert('修订失败：' + e.message);
-    } finally {
-      document.querySelector('#submitRevisionBtn').disabled = false;
-      document.querySelector('#submitRevisionBtn').textContent = '提交修订（产生新版本）';
-    }
-  };
-}
-
-const importBtn = document.querySelector('#importBtn');
-if (importBtn) {
-  importBtn.onclick = () => window.location.href = '/import';
-}
-const importBtn2 = document.querySelector('#importBtn2');
-if (importBtn2) {
-  importBtn2.onclick = () => window.location.href = '/import';
-}
+  const itemIds = currentBatchDetail.items
+    .filter(i => i.latestScore !== null && i.latestScore < 70)
+    .map(i => i.id);
+  createBatchTasksFromDrawer(null, itemIds);
+};
 
 renderForms();
-bindVersionModalEvents();
-bindConflictModalEvents();
-initDataSync();
 load();
-
-const lifecycleItemSelect = document.querySelector('#lifecycleItemSelect');
-if (lifecycleItemSelect) {
-  lifecycleItemSelect.onchange = () => {
-    if (lifecycleItemSelect.value) {
-      openLifecycleDetail(lifecycleItemSelect.value);
-    } else {
-      document.querySelector('#lifecycleDetail').style.display = 'none';
-    }
-  };
-}
-
-let currentLifecycleItemId = null;
-
-async function openLifecycleDetail(itemId) {
-  currentLifecycleItemId = itemId;
-  const item = items.find(x => x.id === itemId || x.code === itemId);
-  if (!item) return;
-  const detailEl = document.querySelector('#lifecycleDetail');
-  detailEl.style.display = '';
-  document.querySelector('#lifecycleItemTitle').textContent =
-    (item.code || item.id) + ' · ' + (item.smokeSource || '') + ' — 生命周期追踪';
-  const stateEl = document.querySelector('#lifecycleCurrentState');
-  stateEl.textContent = item.lifecycleState || '建档';
-  stateEl.className = 'pill ' + statusClass(item.lifecycleState || '建档');
-  try {
-    const data = await api('/api/items/' + encodeURIComponent(itemId) + '/lifecycle');
-    renderLifecycleStateFlow(data.lifecycleState, data.availableTransitions);
-    renderLifecycleActions(data.availableTransitions, itemId);
-    renderLifecycleTimeline(data.timeline);
-  } catch(e) {
-    document.querySelector('#lifecycleStateFlow').innerHTML = '<div class="empty warn">加载失败：' + escapeHtml(e.message) + '</div>';
-    document.querySelector('#lifecycleTimeline').innerHTML = '';
-    document.querySelector('#lifecycleActions').innerHTML = '';
-  }
-}
-
-function renderLifecycleStateFlow(currentState, transitions) {
-  const flowEl = document.querySelector('#lifecycleStateFlow');
-  const reached = new Set();
-  reached.add(currentState);
-  const allowedNext = transitions.filter(t => t.allowed).map(t => t.to);
-  for (const t of transitions) {
-    reached.add(t.from);
-    reached.add(t.to);
-  }
-  let html = '<div class="lc-flow">';
-  for (const state of LIFECYCLE_STATES) {
-    const isCurrent = state === currentState;
-    const isAllowed = allowedNext.includes(state);
-    const cls = ['lc-flow-state'];
-    if (isCurrent) cls.push('current');
-    else if (isAllowed) cls.push('next');
-    else if (reached.has(state)) cls.push('reached');
-    else cls.push('future');
-    html += '<div class="' + cls.join(' ') + '">';
-    html += '<div class="lc-flow-dot"></div>';
-    html += '<div class="lc-flow-label">' + state + '</div>';
-    if (isCurrent) html += '<div class="lc-flow-tag">当前</div>';
-    html += '</div>';
-    if (state !== LIFECYCLE_STATES[LIFECYCLE_STATES.length - 1]) {
-      html += '<div class="lc-flow-arrow' + (isCurrent ? ' active' : '') + '">→</div>';
-    }
-  }
-  html += '</div>';
-  flowEl.innerHTML = html;
-}
-
-function renderLifecycleActions(transitions, itemId) {
-  const actionsEl = document.querySelector('#lifecycleActions');
-  if (!transitions || transitions.length === 0) {
-    actionsEl.innerHTML = '<div class="meta">当前状态无可用操作</div>';
-    return;
-  }
-  let html = '<div class="section-subtitle">可执行操作</div>';
-  html += '<div class="lc-actions-grid">';
-  for (const t of transitions) {
-    if (t.allowed) {
-      html += '<button class="lc-action-btn allowed" data-lc-action="' + t.action + '" data-lc-item="' + itemId + '">' +
-        t.label + ' → ' + t.to + '</button>';
-    } else {
-      html += '<button class="lc-action-btn disabled" disabled title="' + escapeHtml(t.reason || '') + '">' +
-        t.label + ' <span class="meta">(' + escapeHtml(t.reason || '不可用') + ')</span></button>';
-    }
-  }
-  html += '</div>';
-  actionsEl.innerHTML = html;
-  actionsEl.querySelectorAll('[data-lc-action]').forEach(btn => {
-    btn.onclick = async () => {
-      const action = btn.dataset.lcAction;
-      const id = btn.dataset.lcItem;
-      const item = items.find(x => x.id === id || x.code === id);
-      const baseVersion = item ? item._version : 0;
-      const createdBy = prompt('请输入操作人姓名：', '未指定用户') || '未指定用户';
-      const reason = prompt('请输入操作原因：', '') || '';
-      try {
-        await api('/api/items/' + encodeURIComponent(id) + '/lifecycle', {
-          method: 'POST',
-          body: JSON.stringify({ action, createdBy, reason })
-        }, { _baseVersion: baseVersion });
-        await load();
-        openLifecycleDetail(id);
-      } catch(err) {
-        if (err.conflict) {
-          showConflictModal(err.conflict, { action, createdBy, reason }, () => {
-            load();
-            openLifecycleDetail(id);
-          }, { path: '/api/items/' + encodeURIComponent(id) + '/lifecycle', options: { method: 'POST', body: JSON.stringify({ action, createdBy, reason }) }, baseVersion: err.conflict.baseVersion, onSuccess: () => { load(); openLifecycleDetail(id); } });
-          return;
-        }
-        alert('操作失败：' + (err.message || '未知错误'));
-      }
-    };
-  });
-}
-
-function renderLifecycleTimeline(timeline) {
-  const timelineEl = document.querySelector('#lifecycleTimeline');
-  if (!timeline || timeline.length === 0) {
-    timelineEl.innerHTML = '<div class="empty">暂无生命周期记录</div>';
-    return;
-  }
-  let html = '<div class="lc-timeline">';
-  for (const event of timeline) {
-    const typeCls = event.type === 'lifecycle' ? 'lifecycle' : (event.type === 'test' ? 'test' : 'log');
-    html += '<div class="lc-timeline-item ' + typeCls + '">';
-    html += '<div class="lc-timeline-dot"></div>';
-    html += '<div class="lc-timeline-content">';
-    html += '<div class="lc-timeline-time">' + formatDate(event.at) + '</div>';
-    if (event.type === 'lifecycle') {
-      html += '<div class="lc-timeline-title">' + escapeHtml(event.label || event.action) + '</div>';
-      html += '<div class="lc-timeline-detail">' +
-        '<span class="pill ' + statusClass(event.from) + '">' + escapeHtml(event.from) + '</span>' +
-        ' → ' +
-        '<span class="pill ' + statusClass(event.to) + '">' + escapeHtml(event.to) + '</span>' +
-      '</div>';
-    } else if (event.type === 'test') {
-      html += '<div class="lc-timeline-title">试磨记录' + (event.score !== undefined && event.score !== null ? ' · 评分 ' + event.score : '') + '</div>';
-      const details = [];
-      if (event.paper) details.push(event.paper);
-      if (event.water) details.push(event.water);
-      if (event.speed) details.push('速度:' + event.speed);
-      if (event.ruleName) details.push('规则:' + event.ruleName);
-      if (details.length) html += '<div class="lc-timeline-detail meta">' + escapeHtml(details.join('，')) + '</div>';
-    } else {
-      html += '<div class="lc-timeline-title">' + escapeHtml(event.step || '记录') + '</div>';
-      if (event.note) html += '<div class="lc-timeline-detail meta">' + escapeHtml(event.note) + '</div>';
-    }
-    html += '</div></div>';
-  }
-  html += '</div>';
-  timelineEl.innerHTML = html;
-}

@@ -2,19 +2,14 @@ import http from "node:http";
 import { readFile } from "node:fs/promises";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { page, comparePage, importPage } from "./renderer.js";
+import { page, comparePage } from "./renderer.js";
 import {
   getItems, createItem, patchItem, addLog, addAction, deleteItem,
-  getBatches, createBatch, getBatch, getStats, send,
+  getBatches, createBatch, getBatch, createBatchTasks, getStats, send,
   getTemplates, createTemplate, updateTemplate, deleteTemplate, setDefaultTemplate,
   getStorageKanban, getItemsByStorage,
   getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
-  getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions,
-  previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch,
-  getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch,
-  getItemLifecycle, transitionLifecycle, getLifecycleStates,
-  getViews, createView, updateView, deleteView,
-  streamEvents
+  getComparisonReport
 } from "./routes.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -50,22 +45,11 @@ async function serveStatic(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
-  req.on("error", (err) => {
-    if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
-      console.error("Request error:", err.message);
-    }
-  });
-  res.on("error", (err) => {
-    if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
-      console.error("Response error:", err.message);
-    }
-  });
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && await serveStatic(req, res, url.pathname)) return;
     if (req.method === "GET" && url.pathname === "/") return html(res, page());
     if (req.method === "GET" && url.pathname === "/compare") return html(res, comparePage());
-    if (req.method === "GET" && url.pathname === "/import") return html(res, importPage());
 
     if (req.method === "GET" && url.pathname === "/api/items") return getItems(req, res);
     if (req.method === "GET" && url.pathname === "/api/comparison") return getComparisonReport(req, res);
@@ -86,6 +70,9 @@ const server = http.createServer(async (req, res) => {
 
     const batchDetail = url.pathname.match(/^\/api\/batches\/([^/]+)$/);
     if (batchDetail && req.method === "GET") return getBatch(req, res, batchDetail[1]);
+
+    const batchTasks = url.pathname.match(/^\/api\/batches\/([^/]+)\/tasks$/);
+    if (batchTasks && req.method === "POST") return createBatchTasks(req, res, batchTasks[1]);
 
     if (req.method === "GET" && url.pathname === "/api/templates") return getTemplates(req, res);
     if (req.method === "POST" && url.pathname === "/api/templates") return createTemplate(req, res);
@@ -119,67 +106,9 @@ const server = http.createServer(async (req, res) => {
     const itemDelete = url.pathname.match(/^\/api\/items\/([^/]+)$/);
     if (itemDelete && req.method === "DELETE") return deleteItem(req, res, itemDelete[1]);
 
-    const versionCompare = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/compare$/);
-    if (versionCompare && req.method === "GET") return compareTwoVersions(req, res, versionCompare[1]);
-
-    const versions = url.pathname.match(/^\/api\/items\/([^/]+)\/versions$/);
-    if (versions && req.method === "GET") return getItemVersions(req, res, versions[1]);
-    if (versions && req.method === "POST") return createRevision(req, res, versions[1]);
-
-    const versionRestore = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/([^/]+)\/restore$/);
-    if (versionRestore && req.method === "POST") return restoreItemVersion(req, res, versionRestore[1], versionRestore[2]);
-
-    const versionDetail = url.pathname.match(/^\/api\/items\/([^/]+)\/versions\/([^/]+)$/);
-    if (versionDetail && req.method === "GET") return getVersionDetail(req, res, versionDetail[1], versionDetail[2]);
-
-    if (req.method === "POST" && url.pathname === "/api/import/preview") return previewCSVImport(req, res);
-    if (req.method === "POST" && url.pathname === "/api/import/confirm") return confirmCSVImport(req, res);
-    if (req.method === "GET" && url.pathname === "/api/import/batches") return getImportBatches(req, res);
-
-    const importBatchDetail = url.pathname.match(/^\/api\/import\/batches\/([^/]+)$/);
-    if (importBatchDetail && req.method === "GET") return getImportBatch(req, res, importBatchDetail[1]);
-
-    if (req.method === "GET" && url.pathname === "/api/scoring-rules") return getScoringRules(req, res);
-    if (req.method === "POST" && url.pathname === "/api/scoring-rules") return createScoringRule(req, res);
-    if (req.method === "POST" && url.pathname === "/api/scoring-rules/reorder") return reorderScoringRules(req, res);
-    if (req.method === "GET" && url.pathname === "/api/scoring-rules/preview") return previewRuleMatch(req, res);
-
-    const scoringRuleId = url.pathname.match(/^\/api\/scoring-rules\/([^/]+)$/);
-    if (scoringRuleId && req.method === "PATCH") return updateScoringRule(req, res, scoringRuleId[1]);
-    if (scoringRuleId && req.method === "DELETE") return deleteScoringRule(req, res, scoringRuleId[1]);
-
-    if (req.method === "GET" && url.pathname === "/api/events/stream") return streamEvents(req, res);
-
-    if (req.method === "GET" && url.pathname === "/api/lifecycle/states") return getLifecycleStates(req, res);
-
-    const lifecycleItem = url.pathname.match(/^\/api\/items\/([^/]+)\/lifecycle$/);
-    if (lifecycleItem && req.method === "GET") return getItemLifecycle(req, res, lifecycleItem[1]);
-    if (lifecycleItem && req.method === "POST") return transitionLifecycle(req, res, lifecycleItem[1]);
-
-    if (req.method === "GET" && url.pathname === "/api/views") return getViews(req, res);
-    if (req.method === "POST" && url.pathname === "/api/views") return createView(req, res);
-
-    const viewId = url.pathname.match(/^\/api\/views\/([^/]+)$/);
-    if (viewId && req.method === "PATCH") return updateView(req, res, viewId[1]);
-    if (viewId && req.method === "DELETE") return deleteView(req, res, viewId[1]);
-
     send(res, 404, { error: "not_found" });
   } catch (error) {
     send(res, 500, { error: error.message });
-  }
-});
-
-server.on("connection", (socket) => {
-  socket.on("error", (err) => {
-    if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
-      console.error("Socket error:", err.message);
-    }
-  });
-});
-
-server.on("error", (err) => {
-  if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
-    console.error("Server error:", err.message);
   }
 });
 

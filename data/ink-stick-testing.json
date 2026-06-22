@@ -1846,7 +1846,7 @@
       "glueRatio": "8%",
       "ageYears": 3,
       "storage": "试样盒C",
-      "status": "重点观察",
+      "status": "建议复测",
       "logs": [
         {
           "at": "2026-06-21T03:50:28.907Z",
@@ -1870,6 +1870,11 @@
           "at": "2026-06-21T03:50:28.907Z",
           "step": "入库",
           "note": "入库至试样盒C（迁移补录）"
+        },
+        {
+          "at": "2026-06-22T04:00:57.998Z",
+          "step": "生命周期",
+          "note": "重点观察 → 复测（创建复测任务触发）"
         }
       ],
       "tests": [
@@ -2005,16 +2010,102 @@
               }
             ]
           }
+        },
+        {
+          "version": 3,
+          "createdAt": "2026-06-22T04:00:57.998Z",
+          "createdBy": "未指定用户",
+          "reason": "创建复测任务，触发生命周期状态变更",
+          "action": "revise",
+          "parentVersion": 2,
+          "snapshot": {
+            "status": "建议复测",
+            "lifecycleState": "复测",
+            "storage": "试样盒C",
+            "smokeSource": "桐油烟",
+            "glueRatio": "8%",
+            "ageYears": 3,
+            "batchId": "BAT-20260611-02",
+            "logs": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "step": "试磨",
+                "note": "棉连纸，评分79",
+                "score": 79
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
+                "step": "规则",
+                "note": "评分90未匹配规则，状态保持重点观察",
+                "score": 90
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
+                "step": "试磨",
+                "note": "宣纸，20滴，研磨10分钟，评分90",
+                "score": 90
+              },
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "step": "入库",
+                "note": "入库至试样盒C（迁移补录）"
+              },
+              {
+                "at": "2026-06-22T04:00:57.998Z",
+                "step": "生命周期",
+                "note": "重点观察 → 复测（创建复测任务触发）"
+              }
+            ],
+            "tests": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "paper": "棉连纸",
+                "water": "18滴",
+                "speed": "中",
+                "colorLayer": "偏暖",
+                "sediment": "少",
+                "score": 79
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
+                "score": 90,
+                "paper": "宣纸",
+                "water": "20滴",
+                "grindingTime": "10分钟"
+              }
+            ]
+          },
+          "changes": {
+            "status": {
+              "before": "重点观察",
+              "after": "建议复测"
+            },
+            "lifecycleState": {
+              "after": "复测"
+            },
+            "logsAdded": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "step": "入库",
+                "note": "入库至试样盒C（迁移补录）"
+              },
+              {
+                "at": "2026-06-22T04:00:57.998Z",
+                "step": "生命周期",
+                "note": "重点观察 → 复测（创建复测任务触发）"
+              }
+            ]
+          }
         }
       ],
-      "currentVersion": 2,
-      "_version": 1,
+      "currentVersion": 3,
+      "_version": 2,
       "_createdAt": "2026-06-21T03:50:28.907Z",
       "_createdBy": "系统迁移",
-      "_updatedAt": "2026-06-21T03:50:28.907Z",
+      "_updatedAt": "2026-06-22T04:00:57.998Z",
       "_updatedBy": "系统迁移",
       "lifecycleVersion": 1,
-      "lifecycleState": "重点观察",
+      "lifecycleState": "复测",
       "lifecycleHistory": [
         {
           "from": "建档",
@@ -2036,9 +2127,236 @@
           "action": "markWatching",
           "label": "标记重点观察",
           "at": "2026-06-21T10:17:10.129Z"
+        },
+        {
+          "from": "重点观察",
+          "to": "复测",
+          "action": "retest",
+          "label": "创建复测",
+          "at": "2026-06-22T04:00:57.998Z"
         }
       ],
-      "_changeLog": []
+      "_changeLog": [
+        {
+          "version": 2,
+          "snapshot": {
+            "id": "IS-002",
+            "code": "IS-002",
+            "batchId": "BAT-20260611-02",
+            "smokeSource": "桐油烟",
+            "glueRatio": "8%",
+            "ageYears": 3,
+            "storage": "试样盒C",
+            "status": "建议复测",
+            "logs": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "step": "试磨",
+                "note": "棉连纸，评分79",
+                "score": 79
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
+                "step": "规则",
+                "note": "评分90未匹配规则，状态保持重点观察",
+                "score": 90
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
+                "step": "试磨",
+                "note": "宣纸，20滴，研磨10分钟，评分90",
+                "score": 90
+              },
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "step": "入库",
+                "note": "入库至试样盒C（迁移补录）"
+              },
+              {
+                "at": "2026-06-22T04:00:57.998Z",
+                "step": "生命周期",
+                "note": "重点观察 → 复测（创建复测任务触发）"
+              }
+            ],
+            "tests": [
+              {
+                "at": "2026-06-21T03:50:28.907Z",
+                "paper": "棉连纸",
+                "water": "18滴",
+                "speed": "中",
+                "colorLayer": "偏暖",
+                "sediment": "少",
+                "score": 79
+              },
+              {
+                "at": "2026-06-21T10:17:10.129Z",
+                "score": 90,
+                "paper": "宣纸",
+                "water": "20滴",
+                "grindingTime": "10分钟"
+              }
+            ],
+            "versions": [
+              {
+                "version": 1,
+                "createdAt": "2026-06-21T03:50:28.907Z",
+                "createdBy": "系统迁移",
+                "reason": "初始版本（历史数据迁移）",
+                "action": "create",
+                "parentVersion": null,
+                "snapshot": {
+                  "status": "重点观察",
+                  "storage": "试样盒C",
+                  "smokeSource": "桐油烟",
+                  "glueRatio": "8%",
+                  "ageYears": 3,
+                  "batchId": "BAT-20260611-02",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T03:50:28.907Z",
+                      "step": "试磨",
+                      "note": "棉连纸，评分79",
+                      "score": 79
+                    }
+                  ],
+                  "tests": [
+                    {
+                      "at": "2026-06-21T03:50:28.907Z",
+                      "paper": "棉连纸",
+                      "water": "18滴",
+                      "speed": "中",
+                      "colorLayer": "偏暖",
+                      "sediment": "少",
+                      "score": 79
+                    }
+                  ]
+                },
+                "changes": null
+              },
+              {
+                "version": 2,
+                "createdAt": "2026-06-21T10:17:10.129Z",
+                "createdBy": "未指定用户",
+                "reason": "创建试磨记录，评分90",
+                "action": "revise",
+                "parentVersion": 1,
+                "snapshot": {
+                  "status": "重点观察",
+                  "storage": "试样盒C",
+                  "smokeSource": "桐油烟",
+                  "glueRatio": "8%",
+                  "ageYears": 3,
+                  "batchId": "BAT-20260611-02",
+                  "logs": [
+                    {
+                      "at": "2026-06-21T03:50:28.907Z",
+                      "step": "试磨",
+                      "note": "棉连纸，评分79",
+                      "score": 79
+                    },
+                    {
+                      "at": "2026-06-21T10:17:10.129Z",
+                      "step": "规则",
+                      "note": "评分90未匹配规则，状态保持重点观察",
+                      "score": 90
+                    },
+                    {
+                      "at": "2026-06-21T10:17:10.129Z",
+                      "step": "试磨",
+                      "note": "宣纸，20滴，研磨10分钟，评分90",
+                      "score": 90
+                    }
+                  ],
+                  "tests": [
+                    {
+                      "at": "2026-06-21T03:50:28.907Z",
+                      "paper": "棉连纸",
+                      "water": "18滴",
+                      "speed": "中",
+                      "colorLayer": "偏暖",
+                      "sediment": "少",
+                      "score": 79
+                    },
+                    {
+                      "at": "2026-06-21T10:17:10.129Z",
+                      "score": 90,
+                      "paper": "宣纸",
+                      "water": "20滴",
+                      "grindingTime": "10分钟"
+                    }
+                  ]
+                },
+                "changes": {
+                  "testsAdded": [
+                    {
+                      "at": "2026-06-21T10:17:10.129Z",
+                      "score": 90,
+                      "paper": "宣纸",
+                      "water": "20滴",
+                      "grindingTime": "10分钟"
+                    }
+                  ],
+                  "logsAdded": [
+                    {
+                      "at": "2026-06-21T10:17:10.129Z",
+                      "step": "规则",
+                      "note": "评分90未匹配规则，状态保持重点观察",
+                      "score": 90
+                    },
+                    {
+                      "at": "2026-06-21T10:17:10.129Z",
+                      "step": "试磨",
+                      "note": "宣纸，20滴，研磨10分钟，评分90",
+                      "score": 90
+                    }
+                  ]
+                }
+              }
+            ],
+            "currentVersion": 2,
+            "_version": 1,
+            "_createdAt": "2026-06-21T03:50:28.907Z",
+            "_createdBy": "系统迁移",
+            "_updatedAt": "2026-06-21T03:50:28.907Z",
+            "_updatedBy": "系统迁移",
+            "lifecycleVersion": 1,
+            "lifecycleState": "复测",
+            "lifecycleHistory": [
+              {
+                "from": "建档",
+                "to": "入库",
+                "action": "store",
+                "label": "入库",
+                "at": "2026-06-21T03:50:28.907Z"
+              },
+              {
+                "from": "入库",
+                "to": "已试磨",
+                "action": "test",
+                "label": "试磨",
+                "at": "2026-06-21T03:50:28.907Z"
+              },
+              {
+                "from": "已试磨",
+                "to": "重点观察",
+                "action": "markWatching",
+                "label": "标记重点观察",
+                "at": "2026-06-21T10:17:10.129Z"
+              },
+              {
+                "from": "重点观察",
+                "to": "复测",
+                "action": "retest",
+                "label": "创建复测",
+                "at": "2026-06-22T04:00:57.998Z"
+              }
+            ],
+            "_changeLog": []
+          },
+          "at": "2026-06-22T04:00:57.998Z",
+          "by": "系统迁移"
+        }
+      ]
     }
   ],
   "templates": [
@@ -2123,7 +2441,24 @@
       "_updatedBy": "系统迁移"
     }
   ],
-  "tasks": [],
+  "tasks": [
+    {
+      "id": "TSK-1782100857998XOD7",
+      "itemId": "IS-002",
+      "scheduledDate": "2026-06-23",
+      "assignee": "测试员",
+      "status": "待办",
+      "note": "批次批量测试",
+      "createdAt": "2026-06-22T04:00:57.998Z",
+      "completedAt": null,
+      "testRecordId": null,
+      "_version": 1,
+      "_createdAt": "2026-06-22T04:00:57.998Z",
+      "_createdBy": "未指定用户",
+      "_updatedAt": "2026-06-22T04:00:57.998Z",
+      "_updatedBy": "未指定用户"
+    }
+  ],
   "views": [
     {
       "id": "VIEW-DEFAULT-ALL",
