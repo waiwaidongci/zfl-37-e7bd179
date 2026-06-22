@@ -1606,6 +1606,7 @@ templateSelect.onchange = () => {
 };
 const scoringRuleForm = document.querySelector('#scoringRuleForm');
 let editingScoringRuleId = null;
+let srImpactConfirmed = false;
 const srResultStatusCustomCheck = document.querySelector('#srResultStatusCustomCheck');
 const srResultStatusCustom = document.querySelector('#srResultStatusCustom');
 if (srResultStatusCustomCheck) {
@@ -1618,26 +1619,208 @@ if (srResultStatusCustomCheck) {
         srResultStatusCustom.focus();
       }
     }
+    srImpactConfirmed = false;
   };
 }
+
+function getScoringRuleFormData() {
+  const fd = new FormData(scoringRuleForm);
+  let resultStatusValue = '';
+  if (srResultStatusCustomCheck && srResultStatusCustomCheck.checked) {
+    resultStatusValue = fd.get('resultStatusCustom')?.toString().trim() || '';
+  } else {
+    resultStatusValue = fd.get('resultStatus')?.toString() || '';
+  }
+  return {
+    name: fd.get('name')?.toString() || '',
+    minScore: Number(fd.get('minScore')),
+    maxScore: Number(fd.get('maxScore')),
+    resultStatus: resultStatusValue,
+    hintText: fd.get('hintText')?.toString() || '',
+    order: Number(fd.get('order') || 0),
+    excludeRuleId: editingScoringRuleId || null
+  };
+}
+
+function resetScoringRuleForm() {
+  editingScoringRuleId = null;
+  srImpactConfirmed = false;
+  scoringRuleForm.reset();
+  scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
+  const submitBtn = document.querySelector('#srSubmitBtn');
+  if (submitBtn) submitBtn.textContent = '保存规则';
+  if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
+  if (srResultStatusCustom) {
+    srResultStatusCustom.style.display = 'none';
+    srResultStatusCustom.value = '';
+  }
+  const srSelect = document.querySelector('#srResultStatus');
+  if (srSelect) srSelect.disabled = false;
+  document.querySelector('#srOrder').value = '0';
+  const impactEl = document.querySelector('#srImpactPreview');
+  if (impactEl) impactEl.style.display = 'none';
+}
+
+function renderImpactPreview(result) {
+  const impactEl = document.querySelector('#srImpactPreview');
+  if (!impactEl) return;
+  impactEl.style.display = '';
+
+  if (!result) {
+    impactEl.innerHTML = '<div class="impact-empty">请填写规则信息后点击预览</div>';
+    return;
+  }
+
+  const v = result.validation || {};
+  const imp = result.impact || {};
+
+  let html = '<div class="impact-preview">';
+  html += '<div class="impact-preview-title">规则影响预览</div>';
+
+  if (!v.valid && v.errors && v.errors.length > 0) {
+    html += '<div class="impact-validation-errors">';
+    html += '<div style="font-weight:700;margin-bottom:4px">校验未通过：</div>';
+    for (const e of v.errors) {
+      html += '<div>· ' + escapeHtml(e) + '</div>';
+    }
+    html += '</div>';
+  }
+
+  html += '<div class="impact-stats">';
+  html += '<div class="impact-stat"><span class="impact-stat-label">命中墨锭数</span><span class="impact-stat-value">' + (imp.affectedCount || 0) + '</span></div>';
+  html += '<div class="impact-stat"><span class="impact-stat-label">状态将变更</span><span class="impact-stat-value ' + (imp.statusChangedCount > 0 ? 'warn' : 'done') + '">' + (imp.statusChangedCount || 0) + '</span></div>';
+  html += '<div class="impact-stat"><span class="impact-stat-label">覆盖率变化</span><span class="impact-stat-value ' + ((imp.coverageDiff || 0) > 0 ? 'done' : (imp.coverageDiff || 0) < 0 ? 'warn' : '') + '">' + ((imp.coverageDiff || 0) >= 0 ? '+' : '') + (imp.coverageDiff || 0) + '</span></div>';
+  html += '</div>';
+
+  const statusChanges = imp.statusChanges || {};
+  const changeKeys = Object.keys(statusChanges);
+  if (changeKeys.length > 0) {
+    html += '<div class="impact-section">';
+    html += '<div class="impact-section-title">状态变化详情</div>';
+    for (const key of changeKeys) {
+      const change = statusChanges[key];
+      html += '<div class="impact-change-row">';
+      html += '<span class="impact-change-from">' + escapeHtml(change.from) + '</span>';
+      html += '<span class="impact-change-arrow">→</span>';
+      html += '<span class="impact-change-to">' + escapeHtml(change.to) + '</span>';
+      html += '<span class="impact-change-count">' + change.count + ' 锭</span>';
+      if (change.examples && change.examples.length > 0) {
+        html += '<div class="impact-change-examples">示例：' + change.examples.map(e => escapeHtml(e)).join('、') + '</div>';
+      }
+      html += '</div>';
+    }
+    html += '</div>';
+  }
+
+  if (imp.coverageBefore || imp.coverageAfter) {
+    const beforeCov = imp.coverageBefore || {};
+    const afterCov = imp.coverageAfter || {};
+    html += '<div class="impact-section">';
+    html += '<div class="impact-section-title">覆盖区间变化</div>';
+    html += '<div class="impact-coverage-row">';
+    html += '<span class="impact-coverage-label">调整前</span>';
+    html += '<span class="impact-coverage-value">' + (beforeCov.coveragePercent || 0) + '%（' + (beforeCov.totalCoverage || 0) + '/101）</span>';
+    if (beforeCov.hasFullCoverage) {
+      html += '<span class="pill done" style="margin-left:auto">完整覆盖</span>';
+    } else if (beforeCov.gaps && beforeCov.gaps.length > 0) {
+      const gapDesc = beforeCov.gaps.map(([a, b]) => a === b ? a : (a + '-' + b)).join('、');
+      html += '<span class="pill warn" style="margin-left:auto">空白：' + escapeHtml(gapDesc) + '</span>';
+    }
+    html += '</div>';
+    html += '<div class="impact-coverage-row">';
+    html += '<span class="impact-coverage-label">调整后</span>';
+    html += '<span class="impact-coverage-value">' + (afterCov.coveragePercent || 0) + '%（' + (afterCov.totalCoverage || 0) + '/101）</span>';
+    const diffCls = (imp.coverageDiff || 0) > 0 ? 'positive' : (imp.coverageDiff || 0) < 0 ? 'negative' : 'zero';
+    html += '<span class="impact-coverage-diff ' + diffCls + '">' + ((imp.coverageDiff || 0) >= 0 ? '+' : '') + (imp.coverageDiff || 0) + '</span>';
+    if (afterCov.hasFullCoverage) {
+      html += ' <span class="pill done">完整覆盖</span>';
+    } else if (afterCov.gaps && afterCov.gaps.length > 0) {
+      const gapDesc = afterCov.gaps.map(([a, b]) => a === b ? a : (a + '-' + b)).join('、');
+      html += ' <span class="pill warn">空白：' + escapeHtml(gapDesc) + '</span>';
+    }
+    html += '</div>';
+    html += '</div>';
+  }
+
+  if (imp.affectedCount === 0) {
+    html += '<div class="impact-empty">当前无试磨记录的墨锭命中此规则区间</div>';
+  }
+
+  html += '</div>';
+  impactEl.innerHTML = html;
+}
+
+const srPreviewImpactBtn = document.querySelector('#srPreviewImpactBtn');
+if (srPreviewImpactBtn) {
+  srPreviewImpactBtn.onclick = async () => {
+    const data = getScoringRuleFormData();
+    if (isNaN(data.minScore) || isNaN(data.maxScore)) {
+      alert('请先填写有效的分数区间');
+      return;
+    }
+    if (!data.resultStatus) {
+      alert('请先选择或输入状态结果');
+      return;
+    }
+    srPreviewImpactBtn.textContent = '正在分析...';
+    srPreviewImpactBtn.disabled = true;
+    try {
+      const result = await api('/api/scoring-rules/impact-preview', {
+        method: 'POST',
+        body: JSON.stringify(data)
+      });
+      renderImpactPreview(result);
+      if (result.validation && result.validation.valid) {
+        const imp = result.impact || {};
+        if (imp.statusChangedCount > 0) {
+          srImpactConfirmed = false;
+        } else {
+          srImpactConfirmed = true;
+        }
+      } else {
+        srImpactConfirmed = false;
+      }
+    } catch(err) {
+      const impactEl = document.querySelector('#srImpactPreview');
+      if (impactEl) {
+        impactEl.style.display = '';
+        impactEl.innerHTML = '<div class="impact-validation-errors"><div>预览失败：' + escapeHtml(err.message || '未知错误') + '</div></div>';
+      }
+      srImpactConfirmed = false;
+    }
+    srPreviewImpactBtn.textContent = '预览规则影响';
+    srPreviewImpactBtn.disabled = false;
+  };
+}
+
 if (scoringRuleForm) {
   scoringRuleForm.onsubmit = async event => {
     event.preventDefault();
-    const fd = new FormData(scoringRuleForm);
-    let resultStatusValue = '';
-    if (srResultStatusCustomCheck && srResultStatusCustomCheck.checked) {
-      resultStatusValue = fd.get('resultStatusCustom')?.toString().trim() || '';
-    } else {
-      resultStatusValue = fd.get('resultStatus')?.toString() || '';
+    const data = getScoringRuleFormData();
+    delete data.excludeRuleId;
+
+    if (!srImpactConfirmed) {
+      const imp = (await (async () => {
+        try {
+          return await api('/api/scoring-rules/impact-preview', {
+            method: 'POST',
+            body: JSON.stringify({ ...data, excludeRuleId: editingScoringRuleId || null })
+          });
+        } catch(e) { return null; }
+      })());
+      if (imp) {
+        renderImpactPreview(imp);
+        if (imp.impact && imp.impact.statusChangedCount > 0) {
+          const confirmed = confirm(
+            '此规则将导致 ' + imp.impact.statusChangedCount + ' 锭墨锭的状态发生变化。\n' +
+            '请先查看「规则影响预览」确认影响范围。\n\n' +
+            '确认已了解影响并继续保存？'
+          );
+          if (!confirmed) return;
+        }
+      }
     }
-    const data = {
-      name: fd.get('name')?.toString() || '',
-      minScore: Number(fd.get('minScore')),
-      maxScore: Number(fd.get('maxScore')),
-      resultStatus: resultStatusValue,
-      hintText: fd.get('hintText')?.toString() || '',
-      order: Number(fd.get('order') || 0)
-    };
+
     try {
       if (editingScoringRuleId) {
         const currentRule = scoringRules.find(r => r.id === editingScoringRuleId);
@@ -1647,32 +1830,10 @@ if (scoringRuleForm) {
         } catch(err) {
           if (err.conflict) {
             showConflictModal(err.conflict, data, () => {
-              editingScoringRuleId = null;
-              scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
-              scoringRuleForm.querySelector('button').textContent = '保存规则';
-              scoringRuleForm.reset();
-              if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-              if (srResultStatusCustom) {
-                srResultStatusCustom.style.display = 'none';
-                srResultStatusCustom.value = '';
-              }
-              const srSelect = document.querySelector('#srResultStatus');
-              if (srSelect) srSelect.disabled = false;
-              document.querySelector('#srOrder').value = '0';
+              resetScoringRuleForm();
               load();
             }, { path: '/api/scoring-rules/' + editingScoringRuleId, options: { method:'PATCH', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-              editingScoringRuleId = null;
-              scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
-              scoringRuleForm.querySelector('button').textContent = '保存规则';
-              scoringRuleForm.reset();
-              if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-              if (srResultStatusCustom) {
-                srResultStatusCustom.style.display = 'none';
-                srResultStatusCustom.value = '';
-              }
-              const srSelect = document.querySelector('#srResultStatus');
-              if (srSelect) srSelect.disabled = false;
-              document.querySelector('#srOrder').value = '0';
+              resetScoringRuleForm();
               load();
             } });
             return;
@@ -1681,43 +1842,18 @@ if (scoringRuleForm) {
         }
         editingScoringRuleId = null;
         scoringRuleForm.querySelector('h2').textContent = '新增评分规则';
-        scoringRuleForm.querySelector('button').textContent = '保存规则';
       } else {
         await api('/api/scoring-rules', { method:'POST', body: JSON.stringify(data) });
       }
-      scoringRuleForm.reset();
-      if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-      if (srResultStatusCustom) {
-        srResultStatusCustom.style.display = 'none';
-        srResultStatusCustom.value = '';
-      }
-      const srSelect = document.querySelector('#srResultStatus');
-      if (srSelect) srSelect.disabled = false;
-      document.querySelector('#srOrder').value = '0';
+      resetScoringRuleForm();
       await load();
     } catch(err) {
       if (err.conflict) {
         showConflictModal(err.conflict, data, () => {
-          scoringRuleForm.reset();
-          if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-          if (srResultStatusCustom) {
-            srResultStatusCustom.style.display = 'none';
-            srResultStatusCustom.value = '';
-          }
-          const srSelect = document.querySelector('#srResultStatus');
-          if (srSelect) srSelect.disabled = false;
-          document.querySelector('#srOrder').value = '0';
+          resetScoringRuleForm();
           load();
         }, { path: '/api/scoring-rules', options: { method:'POST', body: JSON.stringify(data) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
-          scoringRuleForm.reset();
-          if (srResultStatusCustomCheck) srResultStatusCustomCheck.checked = false;
-          if (srResultStatusCustom) {
-            srResultStatusCustom.style.display = 'none';
-            srResultStatusCustom.value = '';
-          }
-          const srSelect = document.querySelector('#srResultStatus');
-          if (srSelect) srSelect.disabled = false;
-          document.querySelector('#srOrder').value = '0';
+          resetScoringRuleForm();
           load();
         } });
         return;
@@ -1755,6 +1891,7 @@ function openScoringRuleEditor(id) {
   const rule = scoringRules.find(r => r.id === id);
   if (!rule) return;
   editingScoringRuleId = id;
+  srImpactConfirmed = false;
   document.querySelector('#srName').value = rule.name || '';
   document.querySelector('#srMinScore').value = rule.minScore;
   document.querySelector('#srMaxScore').value = rule.maxScore;
@@ -1775,10 +1912,13 @@ function openScoringRuleEditor(id) {
   }
   document.querySelector('#srHintText').value = rule.hintText || '';
   document.querySelector('#srOrder').value = rule.order ?? 0;
+  const impactEl = document.querySelector('#srImpactPreview');
+  if (impactEl) impactEl.style.display = 'none';
   const form = document.querySelector('#scoringRuleForm');
   if (form) {
     form.querySelector('h2').textContent = '编辑评分规则';
-    form.querySelector('button').textContent = '更新规则';
+    const submitBtn = document.querySelector('#srSubmitBtn');
+    if (submitBtn) submitBtn.textContent = '更新规则';
     form.scrollIntoView({ behavior: 'smooth', block: 'center' });
   }
 }

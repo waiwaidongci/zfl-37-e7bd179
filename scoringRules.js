@@ -147,6 +147,76 @@ export function getCoverageSummary(rules) {
 
 const BASE_STATUSES = ["待试磨", "已试磨", "重点观察"];
 
+export function previewRuleImpact(pendingRule, allRules, items, excludeRuleId = null) {
+  const min = Number(pendingRule.minScore);
+  const max = Number(pendingRule.maxScore);
+  const newStatus = (pendingRule.resultStatus || "").toString().trim();
+  const newName = pendingRule.name || "";
+
+  const matchedItems = [];
+  for (const item of items || []) {
+    const tests = item.tests || [];
+    if (tests.length === 0) continue;
+    const latestTest = tests[tests.length - 1];
+    const score = Number(latestTest.score);
+    if (isNaN(score)) continue;
+    if (score >= min && score <= max) {
+      const currentStatus = item.status || "待试磨";
+      const statusChanged = currentStatus !== newStatus;
+      matchedItems.push({
+        id: item.id,
+        code: item.code || item.id,
+        smokeSource: item.smokeSource || "",
+        latestScore: score,
+        currentStatus,
+        newStatus,
+        statusChanged
+      });
+    }
+  }
+
+  const affectedCount = matchedItems.length;
+  const statusChangedCount = matchedItems.filter(i => i.statusChanged).length;
+
+  const statusChanges = {};
+  for (const item of matchedItems) {
+    if (!item.statusChanged) continue;
+    const key = item.currentStatus + " → " + item.newStatus;
+    if (!statusChanges[key]) {
+      statusChanges[key] = { from: item.currentStatus, to: item.newStatus, count: 0, examples: [] };
+    }
+    statusChanges[key].count++;
+    if (statusChanges[key].examples.length < 3) {
+      statusChanges[key].examples.push(item.code + (item.smokeSource ? "（" + item.smokeSource + "）" : "") + " 评分" + item.latestScore);
+    }
+  }
+
+  const beforeRules = allRules.filter(r => excludeRuleId && r.id === excludeRuleId ? false : true);
+  const beforeCoverage = getCoverageSummary(beforeRules);
+
+  const afterRules = beforeRules.filter(r => !(excludeRuleId && r.id === excludeRuleId));
+  afterRules.push({
+    id: excludeRuleId || "preview",
+    name: newName,
+    minScore: min,
+    maxScore: max,
+    resultStatus: newStatus,
+    hintText: pendingRule.hintText || "",
+    order: Number(pendingRule.order) || 0
+  });
+  const afterCoverage = getCoverageSummary(afterRules);
+
+  return {
+    affectedCount,
+    statusChangedCount,
+    matchedItems,
+    statusChanges,
+    coverageBefore: beforeCoverage,
+    coverageAfter: afterCoverage,
+    coverageDiff: afterCoverage.totalCoverage - beforeCoverage.totalCoverage
+  };
+}
+
 export function collectStatuses(rules, items = []) {
   const statusSet = new Set(BASE_STATUSES);
   for (const rule of rules || []) {

@@ -1,6 +1,6 @@
 import { loadDb, saveDb, newBatchId, newItemId, newTemplateId, newTaskId, newImportBatchId, summarize, computeBatchProgress, computeBatchDetail, getDefaultTemplate, computeStorageKanban, buildComparisonReport, createVersion, restoreToVersion, buildItemSnapshot, migrateItemToVersions, prepareNewRecord, updateRecordWithVersion, findInCollection, saveAndNotify, CHANGE_TYPES, newViewId } from "./db.js";
 import { analyzeCSV, buildImportItems } from "./csvImporter.js";
-import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId, collectStatuses } from "./scoringRules.js";
+import { matchRule, validateRule, getSortedRules, getCoverageSummary, newScoringRuleId, collectStatuses, previewRuleImpact } from "./scoringRules.js";
 import { detectConflict, resolveConflict, detectDeleteConflict } from "./conflictDetection.js";
 import { onDataChange } from "./syncEvents.js";
 import { COLLLECTIONS } from "./dataLayer.js";
@@ -1411,6 +1411,35 @@ export async function previewRuleMatch(req, res) {
   }
   const match = matchRule(score, db.scoringRules || []);
   return send(res, 200, { score, match });
+}
+
+export async function previewScoringRuleImpact(req, res) {
+  const db = await loadDb();
+  const input = await body(req);
+  const pendingRule = {
+    name: input.name || "",
+    minScore: Number(input.minScore),
+    maxScore: Number(input.maxScore),
+    resultStatus: input.resultStatus || "",
+    hintText: input.hintText || "",
+    order: Number(input.order) || 0
+  };
+  if (isNaN(pendingRule.minScore) || isNaN(pendingRule.maxScore)) {
+    return sendError(res, 400, "invalid_score_range", "分数区间必须为有效数字");
+  }
+  if (pendingRule.minScore > pendingRule.maxScore) {
+    return sendError(res, 400, "invalid_score_range", "最低分不能大于最高分");
+  }
+  const excludeRuleId = input.excludeRuleId || null;
+  const validationErrors = validateRule(pendingRule, db.scoringRules || [], excludeRuleId);
+  const impact = previewRuleImpact(pendingRule, db.scoringRules || [], db.items || [], excludeRuleId);
+  return sendOk(res, {
+    validation: {
+      valid: validationErrors.length === 0,
+      errors: validationErrors
+    },
+    impact
+  });
 }
 
 export async function getItemLifecycle(req, res, id) {

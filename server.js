@@ -11,7 +11,7 @@ import {
   getTasks, createTask, updateTask, deleteTask, completeTask, getTodayTasks, getItemTasks,
   getComparisonReport, getItemVersions, getVersionDetail, createRevision, restoreItemVersion, compareTwoVersions,
   previewCSVImport, confirmCSVImport, getImportBatches, getImportBatch,
-  getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch,
+  getScoringRules, createScoringRule, updateScoringRule, deleteScoringRule, reorderScoringRules, previewRuleMatch, previewScoringRuleImpact,
   getItemLifecycle, transitionLifecycle, getLifecycleStates,
   getViews, createView, updateView, deleteView,
   streamEvents
@@ -146,6 +146,7 @@ const server = http.createServer(async (req, res) => {
     if (req.method === "POST" && url.pathname === "/api/scoring-rules") return createScoringRule(req, res);
     if (req.method === "POST" && url.pathname === "/api/scoring-rules/reorder") return reorderScoringRules(req, res);
     if (req.method === "GET" && url.pathname === "/api/scoring-rules/preview") return previewRuleMatch(req, res);
+    if (req.method === "POST" && url.pathname === "/api/scoring-rules/impact-preview") return previewScoringRuleImpact(req, res);
 
     const scoringRuleId = url.pathname.match(/^\/api\/scoring-rules\/([^/]+)$/);
     if (scoringRuleId && req.method === "PATCH") return updateScoringRule(req, res, scoringRuleId[1]);

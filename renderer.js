@@ -116,7 +116,9 @@ export function page() {
           <textarea name="hintText" id="srHintText" placeholder="例如：试磨评分优秀，可正式使用"></textarea>
           <label>优先级（数字越小越先匹配）</label>
           <input name="order" id="srOrder" type="number" min="0" value="0">
-          <button>保存规则</button>
+          <button type="button" class="secondary gold" id="srPreviewImpactBtn" style="margin-bottom:10px;width:100%">预览规则影响</button>
+          <div id="srImpactPreview" style="display:none;margin-bottom:10px"></div>
+          <button id="srSubmitBtn">保存规则</button>
         </form>
         <div class="panel" style="margin-top:14px">
           <h3 style="margin:0 0 8px;font-size:15px">规则预览测试</h3>

@@ -1,4 +1,4 @@
-import { matchRule, validateRule, getSortedRules, getCoverageSummary, defaultScoringRules, collectStatuses } from "./scoringRules.js";
+import { matchRule, validateRule, getSortedRules, getCoverageSummary, defaultScoringRules, collectStatuses, previewRuleImpact } from "./scoringRules.js";
 
 let passed = 0;
 let failed = 0;
@@ -290,6 +290,108 @@ test("去重：规则和items中重复的状态只出现一次", () => {
   const statuses = collectStatuses(rules, items);
   const count = statuses.filter(s => s === "建议复测").length;
   assertEq(count, 1);
+});
+
+console.log("");
+console.log("--- 9. 规则影响预览测试 ---");
+
+test("无试磨记录的墨锭不被计入命中", () => {
+  const pendingRule = { name: "新规则", minScore: 0, maxScore: 100, resultStatus: "已试磨" };
+  const items = [
+    { id: "1", code: "IS-001", status: "待试磨", tests: [] }
+  ];
+  const result = previewRuleImpact(pendingRule, [], items);
+  assertEq(result.affectedCount, 0);
+  assertEq(result.statusChangedCount, 0);
+});
+
+test("有试磨记录且分数命中区间时计入命中", () => {
+  const pendingRule = { name: "新规则", minScore: 80, maxScore: 100, resultStatus: "已试磨" };
+  const items = [
+    { id: "1", code: "IS-001", status: "重点观察", tests: [{ score: 85 }] }
+  ];
+  const result = previewRuleImpact(pendingRule, [], items);
+  assertEq(result.affectedCount, 1);
+  assertEq(result.statusChangedCount, 1);
+});
+
+test("分数不命中区间时不算命中", () => {
+  const pendingRule = { name: "新规则", minScore: 80, maxScore: 100, resultStatus: "已试磨" };
+  const items = [
+    { id: "1", code: "IS-001", status: "重点观察", tests: [{ score: 50 }] }
+  ];
+  const result = previewRuleImpact(pendingRule, [], items);
+  assertEq(result.affectedCount, 0);
+});
+
+test("状态相同时statusChangedCount为0", () => {
+  const pendingRule = { name: "新规则", minScore: 80, maxScore: 100, resultStatus: "已试磨" };
+  const items = [
+    { id: "1", code: "IS-001", status: "已试磨", tests: [{ score: 90 }] }
+  ];
+  const result = previewRuleImpact(pendingRule, [], items);
+  assertEq(result.affectedCount, 1);
+  assertEq(result.statusChangedCount, 0);
+});
+
+test("statusChanges包含变化详情和示例", () => {
+  const pendingRule = { name: "新规则", minScore: 70, maxScore: 84, resultStatus: "重点观察" };
+  const items = [
+    { id: "1", code: "IS-001", status: "已试磨", smokeSource: "松烟", tests: [{ score: 79 }] },
+    { id: "2", code: "IS-002", status: "已试磨", smokeSource: "油烟", tests: [{ score: 75 }] }
+  ];
+  const result = previewRuleImpact(pendingRule, [], items);
+  assertEq(result.affectedCount, 2);
+  assertEq(result.statusChangedCount, 2);
+  const keys = Object.keys(result.statusChanges);
+  assertTruthy(keys.length > 0);
+  const change = result.statusChanges[keys[0]];
+  assertTruthy(change.from);
+  assertTruthy(change.to);
+  assertEq(change.count, 2);
+  assertTruthy(change.examples.length <= 3);
+});
+
+test("覆盖区间变化正确计算", () => {
+  const existingRules = [
+    { id: "1", name: "低", minScore: 0, maxScore: 50, resultStatus: "待试磨" }
+  ];
+  const pendingRule = { name: "高", minScore: 80, maxScore: 100, resultStatus: "已试磨" };
+  const result = previewRuleImpact(pendingRule, existingRules, []);
+  assertTruthy(result.coverageBefore.totalCoverage < result.coverageAfter.totalCoverage);
+  assertTruthy(result.coverageDiff > 0);
+});
+
+test("排除已有规则ID时正确计算覆盖", () => {
+  const existingRules = [
+    { id: "R1", name: "高", minScore: 85, maxScore: 100, resultStatus: "已试磨" },
+    { id: "R2", name: "低", minScore: 0, maxScore: 84, resultStatus: "建议复测" }
+  ];
+  const pendingRule = { name: "修改高", minScore: 80, maxScore: 100, resultStatus: "已试磨" };
+  const result = previewRuleImpact(pendingRule, existingRules, [], "R1");
+  assertTruthy(result.coverageAfter.totalCoverage >= result.coverageBefore.totalCoverage);
+});
+
+test("空items数组不报错", () => {
+  const pendingRule = { name: "新规则", minScore: 0, maxScore: 100, resultStatus: "已试磨" };
+  const result = previewRuleImpact(pendingRule, [], []);
+  assertEq(result.affectedCount, 0);
+  assertEq(result.statusChangedCount, 0);
+});
+
+test("多个墨锭多个状态变化正确分组", () => {
+  const pendingRule = { name: "新规则", minScore: 0, maxScore: 100, resultStatus: "已试磨" };
+  const items = [
+    { id: "1", code: "IS-001", status: "待试磨", tests: [{ score: 50 }] },
+    { id: "2", code: "IS-002", status: "重点观察", tests: [{ score: 60 }] },
+    { id: "3", code: "IS-003", status: "待试磨", tests: [{ score: 70 }] }
+  ];
+  const result = previewRuleImpact(pendingRule, [], items);
+  assertEq(result.affectedCount, 3);
+  assertEq(result.statusChangedCount, 3);
+  const keys = Object.keys(result.statusChanges);
+  assertTruthy(keys.some(k => k.includes("待试磨")));
+  assertTruthy(keys.some(k => k.includes("重点观察")));
 });
 
 console.log("");
