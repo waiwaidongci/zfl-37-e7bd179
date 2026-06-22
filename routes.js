@@ -1159,6 +1159,7 @@ export async function previewCSVImport(req, res) {
   const contentType = req.headers["content-type"] || "";
 
   let csvText = "";
+  let manualMapping = {};
   if (contentType.startsWith("multipart/form-data")) {
     const raw = await readRawBody(req);
     const boundary = contentType.split("boundary=")[1];
@@ -1177,13 +1178,14 @@ export async function previewCSVImport(req, res) {
   } else {
     const input = await body(req);
     csvText = input.csvText || "";
+    manualMapping = input.fieldMapping || {};
   }
 
   if (!csvText.trim()) {
     return send(res, 400, { error: "empty_csv", message: "CSV内容不能为空" });
   }
 
-  const analysis = analyzeCSV(csvText, db.items, db.batches);
+  const analysis = analyzeCSV(csvText, db.items, db.batches, manualMapping);
 
   const sanitizedAnalysis = {
     totalRows: analysis.totalRows,
@@ -1211,13 +1213,13 @@ export async function previewCSVImport(req, res) {
 export async function confirmCSVImport(req, res) {
   const db = await loadDb();
   const input = await body(req);
-  const { csvText, createdBy = "未指定用户", note = "" } = input;
+  const { csvText, createdBy = "未指定用户", note = "", fieldMapping: manualMapping = {} } = input;
 
   if (!csvText || !csvText.trim()) {
     return sendError(res, 400, "empty_csv", "CSV内容不能为空");
   }
 
-  const analysis = analyzeCSV(csvText, db.items, db.batches);
+  const analysis = analyzeCSV(csvText, db.items, db.batches, manualMapping);
 
   if (analysis.importableCount === 0) {
     return sendError(res, 400, "no_importable_rows", "没有可导入的有效数据行");

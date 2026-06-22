@@ -594,15 +594,19 @@ export function importPage() {
           </div>
 
           <div id="fieldMappingSection" style="margin-bottom:16px">
-            <h3 style="margin-bottom:10px;font-size:15px">字段识别结果</h3>
+            <h3 style="margin-bottom:10px;font-size:15px">字段识别与映射</h3>
             <div id="fieldMappingList" class="field-mapping"></div>
             <div id="unrecognizedFields" style="display:none;margin-top:8px">
-              <span class="pill warn">未识别字段</span>
-              <span id="unrecognizedList" class="meta"></span>
+              <div style="margin-bottom:6px"><span class="pill warn">未识别字段</span> <span class="meta">— 请选择映射到的目标字段：</span></div>
+              <div id="unrecognizedList" class="fm-remap-list"></div>
             </div>
             <div id="missingRequiredFields" style="display:none;margin-top:8px">
               <span class="pill warn">缺失必填字段</span>
               <span id="missingRequiredList" class="meta"></span>
+            </div>
+            <div id="revalidateBar" class="fm-revalidate-bar" style="display:none;margin-top:12px">
+              <button class="gold" id="revalidateBtn" onclick="revalidateWithMapping()">重新校验</button>
+              <span class="meta">修正映射后点击重新校验</span>
             </div>
           </div>
 

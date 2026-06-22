@@ -114,9 +114,33 @@ function normalizeValue(field, value) {
   return trimmed;
 }
 
-export function analyzeCSV(csvText, existingItems = [], existingBatches = []) {
+export function analyzeCSV(csvText, existingItems = [], existingBatches = [], manualMapping = {}) {
   const { headers, rows } = parseCSV(csvText);
-  const { recognized, unrecognized } = recognizeFields(headers);
+  let { recognized, unrecognized } = recognizeFields(headers);
+
+  if (manualMapping && typeof manualMapping === "object") {
+    for (const [colIndexStr, fieldName] of Object.entries(manualMapping)) {
+      const colIdx = Number(colIndexStr);
+      if (isNaN(colIdx) || colIdx < 0 || colIdx >= headers.length) continue;
+      const existingField = Object.entries(recognized).find(([, idx]) => idx === colIdx);
+      if (existingField) {
+        delete recognized[existingField[0]];
+      }
+      if (!fieldName) {
+        unrecognized = unrecognized.filter(u => u.index !== colIdx);
+        unrecognized.push({ index: colIdx, header: headers[colIdx] });
+        continue;
+      }
+      if (!ALL_FIELDS.includes(fieldName)) continue;
+      const prevIdx = recognized[fieldName];
+      if (prevIdx !== undefined) {
+        unrecognized = unrecognized.filter(u => u.index !== prevIdx);
+        unrecognized.push({ index: prevIdx, header: headers[prevIdx] });
+      }
+      recognized[fieldName] = colIdx;
+      unrecognized = unrecognized.filter(u => u.index !== colIdx);
+    }
+  }
 
   const existingCodes = new Set(existingItems.map(item => item.code).filter(Boolean));
   const existingBatchCodes = new Map(existingBatches.map(b => [b.code, b.id]));

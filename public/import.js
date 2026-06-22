@@ -8,6 +8,16 @@ const FIELD_LABELS = {
   status: "状态"
 };
 
+const MAPPABLE_FIELDS = [
+  { key: "code", label: "墨锭编号", required: true },
+  { key: "smokeSource", label: "烟料来源", required: true },
+  { key: "glueRatio", label: "胶料比例", required: false },
+  { key: "ageYears", label: "存放年限", required: false },
+  { key: "storage", label: "存放位置", required: false },
+  { key: "batchId", label: "批次编号", required: false },
+  { key: "status", label: "状态", required: false }
+];
+
 const csvFileInput = document.querySelector('#csvFile');
 const csvTextInput = document.querySelector('#csvText');
 const importedByInput = document.querySelector('#importedBy');
@@ -49,6 +59,7 @@ const batchesEmpty = document.querySelector('#batchesEmpty');
 
 let currentAnalysis = null;
 let currentCSVText = "";
+let currentFieldMapping = {};
 
 async function api(path, options) {
   const res = await fetch(path, options && options.body ? { ...options, headers:{ 'Content-Type':'application/json' } } : options);
@@ -94,6 +105,7 @@ previewBtn.addEventListener('click', async () => {
     return;
   }
   currentCSVText = csvText;
+  currentFieldMapping = {};
   previewBtn.disabled = true;
   previewBtn.textContent = '分析中...';
 
@@ -121,6 +133,7 @@ clearBtn.addEventListener('click', () => {
   resultSection.style.display = 'none';
   currentAnalysis = null;
   currentCSVText = '';
+  currentFieldMapping = {};
 });
 
 backBtn.addEventListener('click', () => {
@@ -140,7 +153,46 @@ continueImportBtn.addEventListener('click', () => {
 cancelPreviewBtn.addEventListener('click', () => {
   previewSection.style.display = 'none';
   currentAnalysis = null;
+  currentFieldMapping = {};
 });
+
+function collectManualMapping() {
+  const mapping = {};
+  document.querySelectorAll('.fm-remap-select').forEach(sel => {
+    const val = sel.value;
+    if (val) {
+      mapping[sel.dataset.colIndex] = val;
+    }
+  });
+  return mapping;
+}
+
+function revalidateWithMapping() {
+  const mapping = collectManualMapping();
+  currentFieldMapping = mapping;
+  doPreview(mapping);
+}
+window.revalidateWithMapping = revalidateWithMapping;
+
+async function doPreview(fieldMapping) {
+  if (!currentCSVText) return;
+  previewBtn.disabled = true;
+  previewBtn.textContent = '校验中...';
+
+  try {
+    const analysis = await api('/api/import/preview', {
+      method: 'POST',
+      body: JSON.stringify({ csvText: currentCSVText, fieldMapping })
+    });
+    currentAnalysis = analysis;
+    renderPreview(analysis);
+  } catch (err) {
+    alert('重新校验失败：' + err.message);
+  } finally {
+    previewBtn.disabled = false;
+    previewBtn.textContent = '预览并校验';
+  }
+}
 
 confirmImportBtn.addEventListener('click', async () => {
   if (!currentAnalysis || !currentCSVText) return;
@@ -165,7 +217,8 @@ confirmImportBtn.addEventListener('click', async () => {
       body: JSON.stringify({
         csvText: currentCSVText,
         createdBy,
-        note
+        note,
+        fieldMapping: currentFieldMapping
       })
     });
     renderResult(result);
@@ -188,6 +241,12 @@ backToImportBtn.addEventListener('click', () => {
   batchesSection.style.display = 'none';
 });
 
+function buildRemapOptions(analysis) {
+  const usedFields = new Set(analysis.fieldMapping.map(fm => fm.field));
+  const available = MAPPABLE_FIELDS.filter(f => !usedFields.has(f.key) || f.required);
+  return available;
+}
+
 function renderPreview(analysis) {
   previewSummary.innerHTML = `
     <div class="preview-stat"><span class="meta">总行数</span><strong>${analysis.totalRows}</strong></div>
@@ -195,19 +254,50 @@ function renderPreview(analysis) {
     <div class="preview-stat ${analysis.errorCount > 0 ? 'warn' : ''}"><span class="meta">错误数</span><strong>${analysis.errorCount}</strong></div>
   `;
 
+  const usedFields = new Set(analysis.fieldMapping.map(fm => fm.field));
+
   fieldMappingList.innerHTML = analysis.fieldMapping.map(fm => `
     <div class="field-mapping-item">
       <span class="fm-header">${escapeHtml(fm.header)}</span>
       <span class="fm-arrow">→</span>
-      <span class="fm-field ${fm.required ? 'required' : ''}">${FIELD_LABELS[fm.field] || fm.field}${fm.required ? ' (必填)' : ''}</span>
+      <select class="fm-remap-select" data-col-index="${fm.columnIndex}" data-original-field="${fm.field}">
+        <option value="${fm.field}" selected>${FIELD_LABELS[fm.field] || fm.field}${fm.required ? ' (必填)' : ''}</option>
+        ${MAPPABLE_FIELDS.filter(f => f.key !== fm.field).map(f =>
+          `<option value="${f.key}">${f.label}${f.required ? ' (必填)' : ''}</option>`
+        ).join('')}
+        <option value="">-- 不映射 --</option>
+      </select>
     </div>
   `).join('');
 
   if (analysis.unrecognizedFields && analysis.unrecognizedFields.length > 0) {
     unrecognizedFields.style.display = '';
-    unrecognizedList.textContent = analysis.unrecognizedFields.map(f => f.header).join('、');
+    const remapOptions = MAPPABLE_FIELDS;
+    unrecognizedList.innerHTML = analysis.unrecognizedFields.map(uf => {
+      const existingVal = currentFieldMapping[String(uf.index)] || '';
+      return `
+        <div class="fm-remap-row">
+          <span class="fm-header">${escapeHtml(uf.header)}</span>
+          <span class="fm-arrow">→</span>
+          <select class="fm-remap-select" data-col-index="${uf.index}">
+            <option value="">-- 请选择映射字段 --</option>
+            ${remapOptions.map(f =>
+              `<option value="${f.key}"${existingVal === f.key ? ' selected' : ''}>${f.label}${f.required ? ' (必填)' : ''}</option>`
+            ).join('')}
+          </select>
+        </div>
+      `;
+    }).join('');
   } else {
     unrecognizedFields.style.display = 'none';
+    unrecognizedList.innerHTML = '';
+  }
+
+  const revalidateBar = document.querySelector('#revalidateBar');
+  if (revalidateBar) {
+    const hasUnrecognized = analysis.unrecognizedFields && analysis.unrecognizedFields.length > 0;
+    const hasMissing = analysis.missingRequiredFields && analysis.missingRequiredFields.length > 0;
+    revalidateBar.style.display = (hasUnrecognized || hasMissing) ? '' : 'none';
   }
 
   if (analysis.missingRequiredFields && analysis.missingRequiredFields.length > 0) {
