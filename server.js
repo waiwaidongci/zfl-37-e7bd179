@@ -20,6 +20,12 @@ import {
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT || 3037);
 
+process.on("uncaughtException", (err) => {
+  if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
+    console.error("Uncaught exception:", err.message);
+  }
+});
+
 function html(res, text) {
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(text);
@@ -50,6 +56,16 @@ async function serveStatic(req, res, pathname) {
 }
 
 const server = http.createServer(async (req, res) => {
+  req.on("error", (err) => {
+    if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
+      console.error("Request error:", err.message);
+    }
+  });
+  res.on("error", (err) => {
+    if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
+      console.error("Response error:", err.message);
+    }
+  });
   try {
     const url = new URL(req.url, `http://${req.headers.host}`);
     if (req.method === "GET" && await serveStatic(req, res, url.pathname)) return;
@@ -156,6 +172,20 @@ const server = http.createServer(async (req, res) => {
     send(res, 404, { error: "not_found" });
   } catch (error) {
     send(res, 500, { error: error.message });
+  }
+});
+
+server.on("connection", (socket) => {
+  socket.on("error", (err) => {
+    if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
+      console.error("Socket error:", err.message);
+    }
+  });
+});
+
+server.on("error", (err) => {
+  if (err.code !== "ECONNRESET" && err.code !== "ECONNABORTED") {
+    console.error("Server error:", err.message);
   }
 });
 

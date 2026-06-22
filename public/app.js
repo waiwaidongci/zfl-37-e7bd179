@@ -385,18 +385,22 @@ function renderForms() {
     return '<label>'+label+'</label><input name="'+key+'" type="'+type+'" '+(key==='name'?'required':'')+'>';
   }).join('');
   const stagesDynamic = scoringStatuses && scoringStatuses.length ? scoringStatuses : stages;
-  statusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
-  storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
-  statusSelect.innerHTML = stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+  const savedStatusFilter = statusFilter.value;
+  statusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
+  statusFilter.value = savedStatusFilter;
+  const savedStorageFilter = storageStatusFilter.value;
+  storageStatusFilter.innerHTML = '<option value="">全部状态</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
+  storageStatusFilter.value = savedStorageFilter;
+  statusSelect.innerHTML = stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
   const revisionStatusEl = document.querySelector('#revisionStatus');
   if (revisionStatusEl) {
-    revisionStatusEl.innerHTML = '<option value="">不修改</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+    revisionStatusEl.innerHTML = '<option value="">不修改</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
   }
   const srResultStatusEl = document.querySelector('#srResultStatus');
   if (srResultStatusEl) {
-    srResultStatusEl.innerHTML = '<option value="">-- 选择或自定义 --</option>' + stagesDynamic.map(s => '<option>'+s+'</option>').join('');
+    srResultStatusEl.innerHTML = '<option value="">-- 选择或自定义 --</option>' + stagesDynamic.map(s => '<option value="'+s+'">'+s+'</option>').join('');
   }
-  taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option>'+s+'</option>').join('');
+  taskStatusFilter.innerHTML = '<option value="">全部状态</option>' + taskStatuses.map(s => '<option value="'+s+'">'+s+'</option>').join('');
   const today = new Date().toISOString().slice(0,10);
   document.querySelector('#taskDate').value = today;
 }
@@ -727,8 +731,12 @@ function renderStorageDetail() {
 }
 
 function render() {
+  const savedBatch = batchFilter.value;
+  const savedStatus = statusFilter.value;
   batchSelect.innerHTML = '<option value="">无（单独录入）</option>' + batches.map(b => '<option value="'+b.id+'">'+b.code+' · '+b.smokeSource+'</option>').join('');
   batchFilter.innerHTML = '<option value="">全部批次</option>' + batches.map(b => '<option value="'+b.id+'">'+b.code+' · '+b.smokeSource+'</option>').join('');
+  batchFilter.value = savedBatch;
+  statusFilter.value = savedStatus;
   itemSelect.innerHTML = items.map(item => '<option value="'+(item.id || item.code)+'">'+(item.code || item.id)+' · '+(item.name || item.shipType || item.source || item.plateSize || item.smokeSource || '')+'</option>').join('');
   templateSelect.innerHTML = '<option value="">-- 手动填写 --</option>' + templates.map(t => '<option value="'+t.id+'" '+(t.isDefault?'selected':'')+'>'+t.name+(t.isDefault?' (默认)':'')+'</option>').join('');
 

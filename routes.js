@@ -1420,7 +1420,8 @@ export async function getViews(req, res) {
       name: v.name,
       filters: v.filters || { status: "", batchId: "", keyword: "" },
       order: v.order,
-      isSystem: v.isSystem || false
+      isSystem: v.isSystem || false,
+      _version: v._version
     }));
   return send(res, 200, views);
 }

@@ -9,7 +9,7 @@ import { emitChange, CHANGE_TYPES } from "./syncEvents.js";
 import { inferLifecycleState, lifecycleToStatus } from "./lifecycle.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dbPath = join(__dirname, "data", "ink-stick-testing.json");
+const dbPath = process.env.DB_PATH || join(__dirname, "data", "ink-stick-testing.json");
 
 const seed = {
   "batches": [
