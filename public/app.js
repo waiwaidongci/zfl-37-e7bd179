@@ -834,6 +834,18 @@ function bindCardEvents() {
   document.querySelectorAll('[data-lifecycle]').forEach(btn => btn.onclick = () => {
     openLifecycleDetail(btn.dataset.lifecycle);
   });
+  document.querySelectorAll('[data-save-test-template]').forEach(btn => btn.onclick = () => {
+    const id = btn.dataset.saveTestTemplate;
+    const item = items.find(x => x.id === id || x.code === id);
+    if (!item || !item.tests || item.tests.length === 0) return;
+    const latestTest = item.tests[item.tests.length - 1];
+    openCreateTemplateFromRecordModal(latestTest, {
+      sourceType: 'card',
+      itemId: id,
+      itemCode: item.code || item.id,
+      itemSmoke: item.smokeSource || ''
+    });
+  });
 }
 
 function renderStorageKanban() {
@@ -1204,6 +1216,19 @@ function cardHtml(item, showStorageEdit) {
       '</div>'
     : '';
   const logs = (item.logs || []).slice(-4).map(l => '<div>'+l.step+'：'+l.note+'</div>').join('');
+  const tests = item.tests || [];
+  const latestTest = tests.length > 0 ? tests[tests.length - 1] : null;
+  let testSummaryHtml = '';
+  let saveTemplateBtn = '';
+  if (latestTest) {
+    const testParts = [];
+    if (latestTest.paper) testParts.push('纸张:' + latestTest.paper);
+    if (latestTest.water) testParts.push('水:' + latestTest.water);
+    if (latestTest.grindingTime) testParts.push('时长:' + latestTest.grindingTime);
+    if (latestTest.speed) testParts.push('速度:' + latestTest.speed);
+    testSummaryHtml = '<div class="test-summary" style="margin-top:6px;padding:8px;background:#f8faf6;border-radius:6px;font-size:12px"><div style="font-weight:600;margin-bottom:4px">最近试磨 · 评分 ' + (latestTest.score ?? '-') + '</div><div class="meta">' + (testParts.length ? testParts.join(' · ') : '暂无详细参数') + '</div></div>';
+    saveTemplateBtn = '<button class="secondary" data-save-test-template="'+itemId+'" style="margin-top:6px">📋 保存为试磨模板</button>';
+  }
   const storageEditBtn = showStorageEdit
     ? '<button class="secondary gold" data-storage-edit="'+itemId+'" style="margin-top:4px">修改存放位置</button>'
     : '';
@@ -1216,7 +1241,7 @@ function cardHtml(item, showStorageEdit) {
   const itemStatusClass = statusClass(item.status);
   const lifecycleState = item.lifecycleState || '';
   const lifecycleBadge = lifecycleState ? '<span class="pill lifecycle ' + statusClass(lifecycleState) + '">生命周期：' + lifecycleState + '</span>' : '';
-  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+itemStatusClass+'">'+item.status+'</span>'+lifecycleBadge+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+'<label>状态</label><select data-status="'+itemId+'">'+stagesDynamic.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+versionActions+'<button class="secondary gold" data-lifecycle="'+itemId+'" style="margin-top:6px">生命周期追踪</button>'+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
+  return '<article class="card '+(isSelected?'card-selected':'')+'"><h3>'+(item.code || item.id)+'</h3><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="pill '+itemStatusClass+'">'+item.status+'</span>'+lifecycleBadge+batchBadge+storageBadge+taskCountBadge+versionBadge+'</div>'+checkboxHtml+main+(batch ? '<div class="meta">批次来源：'+batch.smokeSource+'，入库 '+batch.receiveDate+'</div>' : '')+taskHtml+testSummaryHtml+'<label>状态</label><select data-status="'+itemId+'">'+stagesDynamic.map(s => '<option '+(s===item.status?'selected':'')+'>'+s+'</option>').join('')+'</select><button class="secondary" data-note="'+itemId+'">追加备注</button>'+storageEditBtn+saveTemplateBtn+versionActions+'<button class="secondary gold" data-lifecycle="'+itemId+'" style="margin-top:6px">生命周期追踪</button>'+taskHistory+'<div class="logs meta">'+(logs || '暂无记录')+'</div></article>';
 }
 
 function getAssignees() {
@@ -2068,6 +2093,7 @@ function renderVersionDetail(detail) {
         html.push('<div class="detail-row"><span class="detail-label">参数</span>');
         html.push('<span class="detail-value">' + escapeHtml(extras.join(' / ')) + '</span></div>');
       }
+      html.push('<div style="margin:4px 0 10px 0"><button class="secondary" data-version-save-template="' + i + '" style="padding:4px 10px;font-size:12px">📋 保存此记录为模板</button></div>');
     }
     if (tests.length > 3) {
       html.push('<div class="meta" style="margin-top:6px">... 还有 ' + (tests.length-3) + ' 条历史记录</div>');
@@ -2091,6 +2117,19 @@ function renderVersionDetail(detail) {
     html.push('</div>');
   }
   content.innerHTML = html.join('');
+  content.querySelectorAll('[data-version-save-template]').forEach(btn => btn.onclick = (e) => {
+    e.stopPropagation();
+    const idx = Number(btn.dataset.versionSaveTemplate);
+    const t = tests[idx];
+    if (t) {
+      openCreateTemplateFromRecordModal(t, {
+        sourceType: 'version',
+        itemId: detail.itemId || detail.itemCode,
+        versionNum: v.version,
+        testIndex: idx
+      });
+    }
+  });
 }
 
 function renderDiffView(changes, prevSnap, currSnap) {
@@ -2210,10 +2249,14 @@ function bindVersionModalEvents() {
     document.querySelector('#revisionModal').style.display = 'none';
   document.querySelector('#closeVersionDetail').onclick = () =>
     document.querySelector('#versionDetailModal').style.display = 'none';
+  document.querySelector('#closeCreateTemplateFromRecord').onclick = () =>
+    document.querySelector('#createTemplateFromRecordModal').style.display = 'none';
   document.querySelector('#cancelRevisionBtn').onclick = () =>
     document.querySelector('#revisionModal').style.display = 'none';
   document.querySelector('#cancelVersionDetailBtn').onclick = () =>
     document.querySelector('#versionDetailModal').style.display = 'none';
+  document.querySelector('#cancelCreateTemplateFromRecord').onclick = () =>
+    document.querySelector('#createTemplateFromRecordModal').style.display = 'none';
   document.querySelectorAll('.modal-overlay').forEach(overlay => {
     overlay.onclick = (e) => {
       if (e.target === overlay) overlay.style.display = 'none';
@@ -2508,3 +2551,173 @@ function renderLifecycleTimeline(timeline) {
   html += '</div>';
   timelineEl.innerHTML = html;
 }
+
+let currentTemplateFromRecordData = null;
+
+function openCreateTemplateFromRecordModal(testRecord, sourceInfo) {
+  currentTemplateFromRecordData = { testRecord, sourceInfo };
+  const modal = document.querySelector('#createTemplateFromRecordModal');
+  const titleEl = document.querySelector('#createTemplateFromRecordTitle');
+  const sourceEl = document.querySelector('#createTemplateFromRecordSource');
+  const nameInput = document.querySelector('#tplFromRecordName');
+  const previewEl = document.querySelector('#tplFromRecordPreview');
+
+  titleEl.textContent = '从试磨记录生成模板';
+
+  let sourceDesc = '';
+  if (sourceInfo.sourceType === 'card') {
+    sourceDesc = '墨锭 ' + (sourceInfo.itemCode || sourceInfo.itemId) + (sourceInfo.itemSmoke ? ' · ' + sourceInfo.itemSmoke : '') + ' 的最近一次试磨记录';
+  } else if (sourceInfo.sourceType === 'version') {
+    sourceDesc = '墨锭 ' + (sourceInfo.itemId || '') + ' · 版本 v' + sourceInfo.versionNum + ' · 第 ' + (sourceInfo.testIndex + 1) + ' 条试磨记录';
+  }
+  if (testRecord.at) {
+    sourceDesc += ' · 时间：' + formatDate(testRecord.at);
+  }
+  if (testRecord.score !== undefined && testRecord.score !== null) {
+    sourceDesc += ' · 评分：' + testRecord.score;
+  }
+  sourceEl.innerHTML = '📌 来源：' + escapeHtml(sourceDesc);
+
+  const defaultName = [
+    (sourceInfo.itemSmoke || sourceInfo.itemCode || sourceInfo.itemId || '试磨'),
+    testRecord.paper || '',
+    testRecord.water || ''
+  ].filter(Boolean).join(' · ');
+  nameInput.value = defaultName.substring(0, 50);
+
+  document.querySelector('#tplFromRecordIncludePaper').checked = true;
+  document.querySelector('#tplFromRecordIncludeWater').checked = true;
+  document.querySelector('#tplFromRecordIncludeGrindingTime').checked = true;
+  document.querySelector('#tplFromRecordIncludeSpeed').checked = true;
+  document.querySelector('#tplFromRecordIncludeObservation').checked = true;
+  document.querySelector('#tplFromRecordIsDefault').checked = false;
+
+  updateTemplateFromRecordPreview();
+
+  const checkboxes = [
+    '#tplFromRecordIncludePaper',
+    '#tplFromRecordIncludeWater',
+    '#tplFromRecordIncludeGrindingTime',
+    '#tplFromRecordIncludeSpeed',
+    '#tplFromRecordIncludeObservation'
+  ];
+  checkboxes.forEach(sel => {
+    const el = document.querySelector(sel);
+    if (el) el.onchange = updateTemplateFromRecordPreview;
+  });
+
+  modal.style.display = 'flex';
+  nameInput.focus();
+  nameInput.select();
+}
+
+function updateTemplateFromRecordPreview() {
+  if (!currentTemplateFromRecordData) return;
+  const { testRecord } = currentTemplateFromRecordData;
+  const previewEl = document.querySelector('#tplFromRecordPreview');
+  const includePaper = document.querySelector('#tplFromRecordIncludePaper').checked;
+  const includeWater = document.querySelector('#tplFromRecordIncludeWater').checked;
+  const includeGrindingTime = document.querySelector('#tplFromRecordIncludeGrindingTime').checked;
+  const includeSpeed = document.querySelector('#tplFromRecordIncludeSpeed').checked;
+  const includeObservation = document.querySelector('#tplFromRecordIncludeObservation').checked;
+
+  const rows = [];
+  if (includePaper) rows.push('<div><strong>试磨纸张：</strong>' + escapeHtml(testRecord.paper || '(无数据)') + '</div>');
+  if (includeWater) rows.push('<div><strong>加水量：</strong>' + escapeHtml(testRecord.water || '(无数据)') + '</div>');
+  if (includeGrindingTime) rows.push('<div><strong>研磨时长：</strong>' + escapeHtml(testRecord.grindingTime || '(无数据)') + '</div>');
+  if (includeSpeed) rows.push('<div><strong>出墨速度：</strong>' + escapeHtml(testRecord.speed || '(无数据)') + '</div>');
+  if (includeObservation) {
+    let obsText = testRecord.observationPoints || '';
+    if (!obsText) {
+      const extras = [];
+      if (testRecord.colorLayer) extras.push('墨色层次:' + testRecord.colorLayer);
+      if (testRecord.sediment) extras.push('沉淀情况:' + testRecord.sediment);
+      obsText = extras.join('；');
+    }
+    rows.push('<div><strong>观察重点：</strong>' + escapeHtml(obsText || '(无数据)') + '</div>');
+  }
+  previewEl.innerHTML = rows.length ? rows.join('') : '<span class="meta">请至少选择一个字段</span>';
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const tplForm = document.querySelector('#createTemplateFromRecordForm');
+  if (tplForm) {
+    tplForm.onsubmit = async (event) => {
+      event.preventDefault();
+      if (!currentTemplateFromRecordData) return;
+      const { testRecord } = currentTemplateFromRecordData;
+
+      const name = document.querySelector('#tplFromRecordName').value.trim();
+      if (!name) {
+        alert('请输入方案名称');
+        return;
+      }
+
+      const includePaper = document.querySelector('#tplFromRecordIncludePaper').checked;
+      const includeWater = document.querySelector('#tplFromRecordIncludeWater').checked;
+      const includeGrindingTime = document.querySelector('#tplFromRecordIncludeGrindingTime').checked;
+      const includeSpeed = document.querySelector('#tplFromRecordIncludeSpeed').checked;
+      const includeObservation = document.querySelector('#tplFromRecordIncludeObservation').checked;
+      const isDefault = document.querySelector('#tplFromRecordIsDefault').checked;
+
+      if (!includePaper && !includeWater && !includeGrindingTime && !includeSpeed && !includeObservation) {
+        alert('请至少选择一个要保存的字段');
+        return;
+      }
+
+      let obsText = '';
+      if (includeObservation) {
+        obsText = testRecord.observationPoints || '';
+        if (!obsText) {
+          const extras = [];
+          if (testRecord.colorLayer) extras.push('墨色层次:' + testRecord.colorLayer);
+          if (testRecord.sediment) extras.push('沉淀情况:' + testRecord.sediment);
+          obsText = extras.join('；');
+        }
+      }
+
+      const payload = {
+        name,
+        paper: includePaper ? (testRecord.paper || '') : '',
+        water: includeWater ? (testRecord.water || '') : '',
+        grindingTime: includeGrindingTime ? (testRecord.grindingTime || '') : '',
+        speed: includeSpeed ? (testRecord.speed || '') : '',
+        observationPoints: obsText,
+        isDefault
+      };
+
+      const submitBtn = tplForm.querySelector('button[type="submit"]');
+      const originalText = submitBtn.textContent;
+      try {
+        submitBtn.disabled = true;
+        submitBtn.textContent = '保存中...';
+        await api('/api/templates', { method: 'POST', body: JSON.stringify(payload) });
+        alert('✓ 模板创建成功！' + (isDefault ? '\n已设为默认模板。' : ''));
+        document.querySelector('#createTemplateFromRecordModal').style.display = 'none';
+        await load();
+        if (isDefault) {
+          const newDefault = templates.find(t => t.isDefault);
+          if (newDefault && templateSelect) {
+            templateSelect.value = newDefault.id;
+            applyTemplate(newDefault.id);
+          }
+        }
+      } catch(err) {
+        if (err.conflict) {
+          showConflictModal(err.conflict, payload, () => {
+            document.querySelector('#createTemplateFromRecordModal').style.display = 'none';
+            load();
+          }, { path: '/api/templates', options: { method: 'POST', body: JSON.stringify(payload) }, baseVersion: err.conflict.baseVersion, onSuccess: () => {
+            document.querySelector('#createTemplateFromRecordModal').style.display = 'none';
+            load();
+          } });
+          return;
+        }
+        alert('保存失败：' + (err.message || '未知错误'));
+      } finally {
+        submitBtn.disabled = false;
+        submitBtn.textContent = originalText;
+      }
+    };
+  }
+});

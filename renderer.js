@@ -444,6 +444,54 @@ export function page() {
       </div>
     </div>
   </div>
+  <div id="createTemplateFromRecordModal" class="modal-overlay" style="display:none">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h2 id="createTemplateFromRecordTitle">从试磨记录生成模板</h2>
+        <button class="modal-close" id="closeCreateTemplateFromRecord">×</button>
+      </div>
+      <div class="modal-body">
+        <div id="createTemplateFromRecordSource" class="meta" style="margin-bottom:12px;padding:10px;background:#f8faf6;border-radius:8px"></div>
+        <form id="createTemplateFromRecordForm">
+          <label>方案名称 *</label>
+          <input name="name" id="tplFromRecordName" placeholder="请输入模板名称" required>
+          <div class="section-subtitle" style="margin-top:12px">选择要保存的字段</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px">
+            <label style="display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" name="includePaper" id="tplFromRecordIncludePaper" checked>
+              <span style="margin:0">试磨纸张</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" name="includeWater" id="tplFromRecordIncludeWater" checked>
+              <span style="margin:0">加水量</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" name="includeGrindingTime" id="tplFromRecordIncludeGrindingTime" checked>
+              <span style="margin:0">研磨时长</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0">
+              <input type="checkbox" name="includeSpeed" id="tplFromRecordIncludeSpeed" checked>
+              <span style="margin:0">出墨速度</span>
+            </label>
+            <label style="display:flex;align-items:center;gap:6px;margin:0;grid-column:span 2">
+              <input type="checkbox" name="includeObservation" id="tplFromRecordIncludeObservation" checked>
+              <span style="margin:0">观察重点</span>
+            </label>
+          </div>
+          <div class="section-subtitle" style="margin-top:14px">字段预览</div>
+          <div id="tplFromRecordPreview" style="margin-top:8px;padding:12px;background:#fff;border:1px solid var(--line);border-radius:8px;font-size:13px"></div>
+          <label style="display:flex;align-items:center;gap:8px;margin-top:14px">
+            <input type="checkbox" name="isDefault" id="tplFromRecordIsDefault">
+            <span style="margin:0">设为默认模板</span>
+          </label>
+          <div style="margin-top:16px;display:flex;gap:10px">
+            <button type="submit" class="gold">保存为新模板</button>
+            <button type="button" class="secondary" id="cancelCreateTemplateFromRecord">取消</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
   <div id="syncStatusBar" class="sync-status-bar" style="display:none">
     <span id="syncStatusIcon">🔄</span>
     <span id="syncStatusText">正在同步...</span>

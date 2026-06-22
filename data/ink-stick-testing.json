@@ -2361,6 +2361,21 @@
   ],
   "templates": [
     {
+      "id": "TPL-1782111599110GFTO",
+      "name": "测试模板-松烟墨方案",
+      "paper": "净皮宣纸",
+      "water": "20滴",
+      "grindingTime": "12分钟",
+      "speed": "",
+      "observationPoints": "",
+      "isDefault": true,
+      "_version": 1,
+      "_createdAt": "2026-06-22T06:59:59.110Z",
+      "_createdBy": "未指定用户",
+      "_updatedAt": "2026-06-22T06:59:59.110Z",
+      "_updatedBy": "未指定用户"
+    },
+    {
       "id": "TPL-001",
       "name": "标准松烟墨方案",
       "paper": "净皮宣纸",
@@ -2368,7 +2383,7 @@
       "grindingTime": "10分钟",
       "observationPoints": "墨色层次、沉淀情况、出墨速度",
       "speed": "中",
-      "isDefault": true,
+      "isDefault": false,
       "_version": 1,
       "_createdAt": "2026-06-21T11:42:42.588Z",
       "_createdBy": "系统迁移",
